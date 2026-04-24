@@ -76,3 +76,58 @@ type ArticleSentence struct {
 	TranslationZH *string   `json:"translation_zh,omitempty"`
 	CreatedAt     time.Time `json:"created_at"`
 }
+
+type DictionaryEntry struct {
+	ID                   int64     `json:"id"`
+	Surface              string    `json:"surface"`
+	Lemma                string    `json:"lemma"`
+	Reading              string    `json:"reading"`
+	Romaji               *string   `json:"romaji,omitempty"`
+	PartOfSpeech         string    `json:"part_of_speech"`
+	MeaningZH            string    `json:"meaning_zh"`
+	MeaningJA            *string   `json:"meaning_ja,omitempty"`
+	MeaningEN            *string   `json:"meaning_en,omitempty"`
+	PrimaryMeaningZH     string    `json:"primary_meaning_zh"`
+	JLPTLevel            string    `json:"jlpt_level"`
+	ExampleSentence      *string   `json:"example_sentence,omitempty"`
+	ExampleTranslationZH *string   `json:"example_translation_zh,omitempty"`
+	ConjugationType      *string   `json:"conjugation_type,omitempty"`
+	IsCommon             bool      `json:"is_common"`
+	Source               string    `json:"source"`
+	Verified             bool      `json:"verified"`
+	ConfidenceScore      string    `json:"confidence_score"`
+	AIModel              *string   `json:"ai_model,omitempty"`
+	PromptVersion        *string   `json:"prompt_version,omitempty"`
+	CreatedAt            time.Time `json:"created_at"`
+	UpdatedAt            time.Time `json:"updated_at"`
+}
+
+type VocabularyStatus string
+
+const (
+	VocabularyNew       VocabularyStatus = "new"
+	VocabularyLearning  VocabularyStatus = "learning"
+	VocabularyReviewing VocabularyStatus = "reviewing"
+	VocabularyMastered  VocabularyStatus = "mastered"
+	VocabularyIgnored   VocabularyStatus = "ignored"
+)
+
+type UserVocabulary struct {
+	ID                      int64            `json:"id"`
+	UserID                  int64            `json:"user_id"`
+	DictionaryEntryID       int64            `json:"dictionary_entry_id"`
+	ArticleID               *int64           `json:"article_id,omitempty"`
+	SourceSentenceID        *int64           `json:"source_sentence_id,omitempty"`
+	SelectedText            string           `json:"selected_text"`
+	SourceSentenceText      string           `json:"source_sentence_text"`
+	Status                  VocabularyStatus `json:"status"`
+	Familiarity             int              `json:"familiarity"`
+	CorrectCount            int              `json:"correct_count"`
+	WrongCount              int              `json:"wrong_count"`
+	ConsecutiveCorrectCount int              `json:"consecutive_correct_count"`
+	AddedAt                 time.Time        `json:"added_at"`
+	LastReviewedAt          *time.Time       `json:"last_reviewed_at,omitempty"`
+	NextReviewAt            time.Time        `json:"next_review_at"`
+	CreatedAt               time.Time        `json:"created_at"`
+	UpdatedAt               time.Time        `json:"updated_at"`
+}

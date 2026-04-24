@@ -16,10 +16,12 @@ type contextKey string
 const userContextKey contextKey = "current_user"
 
 type Router struct {
-	mux            *http.ServeMux
-	authService    *service.AuthService
-	profileService *service.ProfileService
-	articleService *service.ArticleService
+	mux               *http.ServeMux
+	authService       *service.AuthService
+	profileService    *service.ProfileService
+	articleService    *service.ArticleService
+	dictionaryService *service.DictionaryService
+	vocabularyService *service.VocabularyService
 }
 
 type staticServer interface {
@@ -30,13 +32,17 @@ func NewRouter(
 	authService *service.AuthService,
 	profileService *service.ProfileService,
 	articleService *service.ArticleService,
+	dictionaryService *service.DictionaryService,
+	vocabularyService *service.VocabularyService,
 	static staticServer,
 ) *Router {
 	r := &Router{
-		mux:            http.NewServeMux(),
-		authService:    authService,
-		profileService: profileService,
-		articleService: articleService,
+		mux:               http.NewServeMux(),
+		authService:       authService,
+		profileService:    profileService,
+		articleService:    articleService,
+		dictionaryService: dictionaryService,
+		vocabularyService: vocabularyService,
 	}
 
 	r.mux.Handle("/assets/", http.StripPrefix("/assets/", static.Handler()))
@@ -55,6 +61,11 @@ func NewRouter(
 	r.mux.HandleFunc("GET /api/articles/{id}", r.withAuth(r.handleArticleDetail))
 	r.mux.HandleFunc("POST /api/articles/{id}/process", r.withAuth(r.handleArticleProcess))
 	r.mux.HandleFunc("GET /api/articles/{id}/sentences", r.withAuth(r.handleArticleSentences))
+	r.mux.HandleFunc("GET /api/reading/articles/{id}", r.withAuth(r.handleReadingArticle))
+	r.mux.HandleFunc("GET /api/dictionary/lookup", r.withAuth(r.handleDictionaryLookup))
+	r.mux.HandleFunc("GET /api/dictionary/{id}", r.withAuth(r.handleDictionaryDetail))
+	r.mux.HandleFunc("POST /api/vocabulary", r.withAuth(r.handleCreateVocabulary))
+	r.mux.HandleFunc("GET /api/vocabulary/check", r.withAuth(r.handleVocabularyCheck))
 
 	return r
 }

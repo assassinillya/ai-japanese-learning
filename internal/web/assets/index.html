@@ -18,6 +18,7 @@
           <button data-view="articles">我的文章</button>
           <button data-view="upload">上传文章</button>
           <button data-view="detail">文章详情</button>
+          <button data-view="reading">阅读模式</button>
           <button data-view="profile">个人中心</button>
         </nav>
       </aside>
@@ -96,10 +97,18 @@
           <h2>文章详情</h2>
           <div id="article-detail" class="summary">请选择一篇文章。</div>
           <div class="detail-actions">
+            <button id="open-reading-button" class="secondary">进入阅读</button>
             <button id="reprocess-button">重新处理文章</button>
           </div>
           <h3>句子拆分</h3>
           <ol id="sentence-list" class="list sentence-list"></ol>
+        </section>
+
+        <section class="panel view" id="view-reading">
+          <h2>文章阅读</h2>
+          <p class="muted">选中文本并停留约 0.5 秒后，会弹出释义窗口。</p>
+          <div id="reading-header" class="summary">请选择一篇文章进入阅读。</div>
+          <div id="reading-content" class="reading-content"></div>
         </section>
 
         <section class="panel view" id="view-profile">
@@ -126,6 +135,13 @@
         </section>
       </main>
     </div>
+    <aside id="lookup-popup" class="lookup-popup hidden">
+      <div class="lookup-popup-card">
+        <div id="lookup-popup-title" class="lookup-title">查词</div>
+        <pre id="lookup-popup-body" class="lookup-body">请选择文章中的文本。</pre>
+        <button id="add-vocabulary-button">加入生词本</button>
+      </div>
+    </aside>
     <script src="/assets/app.js"></script>
   </body>
 </html>

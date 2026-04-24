@@ -125,5 +125,5 @@ func articleIDFromPath(path string) (int64, error) {
 	if len(parts) < 3 {
 		return 0, strconv.ErrSyntax
 	}
-	return strconv.ParseInt(parts[2], 10, 64)
+	return strconv.ParseInt(parts[len(parts)-1], 10, 64)
 }

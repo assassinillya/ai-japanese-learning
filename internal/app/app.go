@@ -24,16 +24,22 @@ func New(cfg *config.Config) (*App, error) {
 
 	userRepo := repository.NewUserRepository(postgres)
 	articleRepo := repository.NewArticleRepository(postgres)
+	dictionaryRepo := repository.NewDictionaryRepository(postgres)
+	vocabularyRepo := repository.NewVocabularyRepository(postgres)
 	authService := service.NewAuthService(userRepo, cfg.TokenSecret)
 	profileService := service.NewProfileService(userRepo)
 	languageService := service.NewLanguageService()
 	translationService := service.NewTranslationService()
 	articleService := service.NewArticleService(articleRepo, languageService, translationService)
+	dictionaryService := service.NewDictionaryService(dictionaryRepo)
+	vocabularyService := service.NewVocabularyService(vocabularyRepo, dictionaryRepo, articleRepo)
 
 	router := handler.NewRouter(
 		authService,
 		profileService,
 		articleService,
+		dictionaryService,
+		vocabularyService,
 		web.NewStaticServer(),
 	)
 
