@@ -1,0 +1,106 @@
+package handler
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"strings"
+
+	"ai-japanese-learning/internal/model"
+	"ai-japanese-learning/internal/service"
+)
+
+type contextKey string
+
+const userContextKey contextKey = "current_user"
+
+type Router struct {
+	mux            *http.ServeMux
+	authService    *service.AuthService
+	profileService *service.ProfileService
+	articleService *service.ArticleService
+}
+
+type staticServer interface {
+	Handler() http.Handler
+}
+
+func NewRouter(
+	authService *service.AuthService,
+	profileService *service.ProfileService,
+	articleService *service.ArticleService,
+	static staticServer,
+) *Router {
+	r := &Router{
+		mux:            http.NewServeMux(),
+		authService:    authService,
+		profileService: profileService,
+		articleService: articleService,
+	}
+
+	r.mux.Handle("/assets/", http.StripPrefix("/assets/", static.Handler()))
+	r.mux.Handle("/", static.Handler())
+
+	r.mux.HandleFunc("POST /api/auth/register", r.handleRegister)
+	r.mux.HandleFunc("POST /api/auth/login", r.handleLogin)
+	r.mux.HandleFunc("POST /api/auth/logout", r.withAuth(r.handleLogout))
+	r.mux.HandleFunc("GET /api/auth/me", r.withAuth(r.handleMe))
+	r.mux.HandleFunc("GET /api/profile", r.withAuth(r.handleProfile))
+	r.mux.HandleFunc("PUT /api/profile/jlpt-level", r.withAuth(r.handleUpdateJLPTLevel))
+	r.mux.HandleFunc("GET /api/articles/library", r.withAuth(r.handleLibraryArticles))
+	r.mux.HandleFunc("GET /api/articles", r.withAuth(r.handleMyArticles))
+	r.mux.HandleFunc("POST /api/articles", r.withAuth(r.handleCreateArticle))
+	r.mux.HandleFunc("POST /api/articles/upload", r.withAuth(r.handleCreateArticle))
+	r.mux.HandleFunc("GET /api/articles/{id}", r.withAuth(r.handleArticleDetail))
+	r.mux.HandleFunc("POST /api/articles/{id}/process", r.withAuth(r.handleArticleProcess))
+	r.mux.HandleFunc("GET /api/articles/{id}/sentences", r.withAuth(r.handleArticleSentences))
+
+	return r
+}
+
+func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+	if req.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	r.mux.ServeHTTP(w, req)
+}
+
+func (r *Router) withAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		token := extractBearerToken(req.Header.Get("Authorization"))
+		user, err := r.authService.Authenticate(req.Context(), token)
+		if err != nil {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+			return
+		}
+		ctx := context.WithValue(req.Context(), userContextKey, user)
+		next(w, req.WithContext(ctx))
+	}
+}
+
+func currentUser(ctx context.Context) (*model.User, error) {
+	user, ok := ctx.Value(userContextKey).(*model.User)
+	if !ok || user == nil {
+		return nil, errors.New("current user missing")
+	}
+	return user, nil
+}
+
+func extractBearerToken(header string) string {
+	parts := strings.SplitN(header, " ", 2)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		return ""
+	}
+	return strings.TrimSpace(parts[1])
+}
+
+func writeJSON(w http.ResponseWriter, status int, payload any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(payload)
+}

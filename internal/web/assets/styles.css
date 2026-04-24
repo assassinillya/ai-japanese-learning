@@ -1,0 +1,162 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", "PingFang SC", sans-serif;
+  background: linear-gradient(160deg, #f4efe6, #e9f1e7);
+  color: #1f2a1f;
+}
+
+.shell {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  min-height: 100vh;
+}
+
+.sidebar {
+  padding: 32px 24px;
+  background: #20342b;
+  color: #f7f3ea;
+}
+
+.sidebar nav {
+  display: grid;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.sidebar button,
+button {
+  border: 0;
+  border-radius: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.sidebar button,
+button[type="submit"] {
+  background: #d47c3c;
+  color: white;
+}
+
+.secondary {
+  background: #d9dfd5;
+  color: #20342b;
+}
+
+.content {
+  padding: 28px;
+  display: grid;
+  gap: 20px;
+}
+
+.panel {
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(8px);
+  border-radius: 20px;
+  padding: 24px;
+  box-shadow: 0 12px 30px rgba(32, 52, 43, 0.08);
+}
+
+.view {
+  display: none;
+}
+
+.view.active {
+  display: block;
+}
+
+form {
+  display: grid;
+  gap: 12px;
+  max-width: 420px;
+}
+
+label {
+  display: grid;
+  gap: 8px;
+  font-size: 14px;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid #c7d2c1;
+  background: #fbfcfa;
+  font: inherit;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.card {
+  padding: 18px;
+  border-radius: 16px;
+  background: #f7faf6;
+}
+
+.list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.summary,
+#message-box {
+  background: #f7faf6;
+  border-radius: 14px;
+  padding: 14px;
+  white-space: pre-wrap;
+}
+
+.wide-form {
+  max-width: 100%;
+}
+
+.detail-actions {
+  margin: 16px 0;
+}
+
+.link-button {
+  background: transparent;
+  color: #20342b;
+  padding: 0;
+  border-radius: 0;
+  font-weight: 600;
+  text-align: left;
+}
+
+.meta {
+  display: inline-block;
+  margin-left: 10px;
+  opacity: 0.7;
+  font-size: 13px;
+}
+
+.article-list li,
+.sentence-list li {
+  margin-bottom: 10px;
+}
+
+.muted {
+  opacity: 0.7;
+}
+
+@media (max-width: 768px) {
+  .shell {
+    grid-template-columns: 1fr;
+  }
+}

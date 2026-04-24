@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ai-japanese-learning v0.2</title>
+    <link rel="stylesheet" href="/assets/styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <h1>AI 日语学习</h1>
+        <p class="muted">ai-japanese-learning · v0.2</p>
+        <nav>
+          <button data-view="login">登录</button>
+          <button data-view="register">注册</button>
+          <button data-view="home">首页</button>
+          <button data-view="articles">我的文章</button>
+          <button data-view="upload">上传文章</button>
+          <button data-view="detail">文章详情</button>
+          <button data-view="profile">个人中心</button>
+        </nav>
+      </aside>
+      <main class="content">
+        <section class="panel" id="status-panel">
+          <div>
+            <h2>当前状态</h2>
+            <p id="auth-status">未登录</p>
+          </div>
+          <button id="logout-button" class="secondary">退出登录</button>
+        </section>
+
+        <section class="panel view active" id="view-login">
+          <h2>登录</h2>
+          <form id="login-form">
+            <label>邮箱 <input name="email" type="email" required /></label>
+            <label>密码 <input name="password" type="password" required /></label>
+            <button type="submit">登录</button>
+          </form>
+        </section>
+
+        <section class="panel view" id="view-register">
+          <h2>注册</h2>
+          <form id="register-form">
+            <label>用户名 <input name="username" type="text" required /></label>
+            <label>邮箱 <input name="email" type="email" required /></label>
+            <label>密码 <input name="password" type="password" minlength="6" required /></label>
+            <label>
+              JLPT 等级
+              <select name="jlpt_level">
+                <option value="N5">N5</option>
+                <option value="N4">N4</option>
+                <option value="N3">N3</option>
+                <option value="N2">N2</option>
+                <option value="N1">N1</option>
+              </select>
+            </label>
+            <button type="submit">注册并进入</button>
+          </form>
+        </section>
+
+        <section class="panel view" id="view-home">
+          <h2>首页</h2>
+          <div class="cards">
+            <div class="card">
+              <h3>学习概览</h3>
+              <p id="home-greeting">请先登录。</p>
+            </div>
+            <div class="card">
+              <h3>内置文章库</h3>
+              <p class="muted">点击文章标题可直接进入详情和阅读准备页面。</p>
+              <ul id="library-list" class="list"></ul>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel view" id="view-articles">
+          <h2>我的文章</h2>
+          <ul id="article-list" class="list article-list"></ul>
+        </section>
+
+        <section class="panel view" id="view-upload">
+          <h2>上传文章</h2>
+          <p class="muted">支持中文、英文、日文等文本。当前单篇上限约 12000 字符。</p>
+          <form id="article-form" class="wide-form">
+            <label>标题 <input name="title" type="text" required /></label>
+            <label>
+              文章内容
+              <textarea name="content" rows="10" required placeholder="粘贴中文、英文或日文文章"></textarea>
+            </label>
+            <button type="submit">上传并处理</button>
+          </form>
+        </section>
+
+        <section class="panel view" id="view-detail">
+          <h2>文章详情</h2>
+          <div id="article-detail" class="summary">请选择一篇文章。</div>
+          <div class="detail-actions">
+            <button id="reprocess-button">重新处理文章</button>
+          </div>
+          <h3>句子拆分</h3>
+          <ol id="sentence-list" class="list sentence-list"></ol>
+        </section>
+
+        <section class="panel view" id="view-profile">
+          <h2>个人中心</h2>
+          <div id="profile-summary" class="summary">尚未加载资料。</div>
+          <form id="jlpt-form">
+            <label>
+              修改 JLPT 等级
+              <select name="jlpt_level">
+                <option value="N5">N5</option>
+                <option value="N4">N4</option>
+                <option value="N3">N3</option>
+                <option value="N2">N2</option>
+                <option value="N1">N1</option>
+              </select>
+            </label>
+            <button type="submit">保存等级</button>
+          </form>
+        </section>
+
+        <section class="panel" id="message-panel">
+          <h2>消息</h2>
+          <pre id="message-box">等待操作</pre>
+        </section>
+      </main>
+    </div>
+    <script src="/assets/app.js"></script>
+  </body>
+</html>
