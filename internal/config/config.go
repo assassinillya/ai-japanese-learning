@@ -24,6 +24,9 @@ func Load() (*Config, error) {
 		ServerAddress: ":8080",
 		TokenSecret:   os.Getenv("APP_TOKEN_SECRET"),
 	}
+	if addr := os.Getenv("SERVER_ADDRESS"); addr != "" {
+		cfg.ServerAddress = addr
+	}
 
 	if cfg.TokenSecret == "" {
 		cfg.TokenSecret = "change-me-in-production"

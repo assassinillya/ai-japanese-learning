@@ -3,14 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ai-japanese-learning v0.7</title>
+    <title>ai-japanese-learning v0.9</title>
     <link rel="stylesheet" href="/assets/styles.css" />
   </head>
   <body>
     <div class="shell">
       <aside class="sidebar">
         <h1>AI 日语学习</h1>
-        <p class="muted">ai-japanese-learning · v0.7</p>
+        <p class="muted">ai-japanese-learning · v0.9</p>
         <nav>
           <button data-view="login">登录</button>
           <button data-view="register">注册</button>
@@ -32,6 +32,7 @@
             <h2>当前状态</h2>
             <p id="auth-status">未登录</p>
           </div>
+          <div id="global-loading" class="loading-indicator hidden">处理中...</div>
           <button id="logout-button" class="secondary">退出登录</button>
         </section>
 

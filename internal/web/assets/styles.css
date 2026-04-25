@@ -5,8 +5,8 @@
 body {
   margin: 0;
   font-family: "Segoe UI", "PingFang SC", sans-serif;
-  background: linear-gradient(160deg, #f4efe6, #e9f1e7);
-  color: #1f2a1f;
+  background: #f5f6f2;
+  color: #1f2723;
 }
 
 .shell {
@@ -17,8 +17,8 @@ body {
 
 .sidebar {
   padding: 32px 24px;
-  background: #20342b;
-  color: #f7f3ea;
+  background: #1f2f2d;
+  color: #f7f4ec;
 }
 
 .sidebar nav {
@@ -43,13 +43,13 @@ button:disabled {
 
 .sidebar button,
 button[type="submit"] {
-  background: #d47c3c;
+  background: #a85f42;
   color: white;
 }
 
 .secondary {
-  background: #d9dfd5;
-  color: #20342b;
+  background: #d7ddd7;
+  color: #1f2f2d;
 }
 
 .content {
@@ -59,11 +59,11 @@ button[type="submit"] {
 }
 
 .panel {
-  background: rgba(255, 255, 255, 0.82);
-  backdrop-filter: blur(8px);
-  border-radius: 20px;
+  background: #ffffff;
+  border: 1px solid #e3e7df;
+  border-radius: 8px;
   padding: 24px;
-  box-shadow: 0 12px 30px rgba(32, 52, 43, 0.08);
+  box-shadow: 0 8px 24px rgba(31, 47, 45, 0.06);
 }
 
 .view {
@@ -105,8 +105,9 @@ textarea {
 
 .card {
   padding: 18px;
-  border-radius: 16px;
-  background: #f7faf6;
+  border-radius: 8px;
+  background: #f8faf7;
+  border: 1px solid #e3e7df;
 }
 
 .list {
@@ -116,10 +117,27 @@ textarea {
 
 .summary,
 #message-box {
-  background: #f7faf6;
-  border-radius: 14px;
+  background: #f8faf7;
+  border-radius: 8px;
   padding: 14px;
   white-space: pre-wrap;
+}
+
+.empty-state {
+  margin: 12px 0 0;
+  padding: 16px;
+  border: 1px dashed #c7d2c1;
+  border-radius: 8px;
+  color: #5d6862;
+  background: #fbfcfa;
+}
+
+.loading-indicator {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #fff4dd;
+  color: #7a4b23;
+  font-size: 14px;
 }
 
 .hidden {

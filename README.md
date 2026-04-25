@@ -1,6 +1,6 @@
-# ai-japanese-learning v0.8-review
+# ai-japanese-learning v0.9
 
-当前版本已经从 `v0.8` 推进到 `v0.8-review`，补齐 review 后发现的 AI 缓存覆盖和结果查询缺口。
+当前版本已经从 `v0.8-review` 推进到 `v0.9`，完成 MVP 整体联调发布版本的基础收尾。
 
 已完成：
 
@@ -45,6 +45,10 @@
 - 词典生成结果入库前会校验必填字段、JLPT 等级和来源枚举
 - 阅读后测验答题结果查询接口 `GET /api/reading/articles/{id}/post-quiz/results`
 - 词汇复习记录查询接口 `GET /api/review/records`
+- 健康检查接口 `GET /api/health`
+- 前端基础加载状态、错误提示、空状态和查词防重复请求
+- Dockerfile、docker-compose 和 `.env.example` 基础部署配置
+- MVP 测试数据 `seeds/002_mvp_seed_v09.sql`
 - 静态前端页面：登录、注册、首页、个人中心、文章上传、文章详情、阅读模式、查词弹窗
 
 ## 版本记录
@@ -88,6 +92,11 @@
   - 将非日语文章占位翻译、挑战阅读题、阅读后测验题、词汇复习题接入统一 AI 缓存和日志。
   - 新增阅读后测验答题结果查询接口。
   - 新增词汇复习记录查询接口。
+- `v0.9`
+  - 完成 MVP 流程联调收尾，强化前端加载状态、错误提示、空状态和查词防重复请求。
+  - 新增健康检查接口，便于部署探活。
+  - 新增 Docker / Compose / env 示例配置。
+  - 新增 MVP 测试文章和词典 seed。
 
 后续每次功能或结构改动，都需要同步更新 `README.md` 的版本记录和当前说明。
 
@@ -138,6 +147,7 @@ postgres://postgres:<password>@localhost:5432/japanese_learning?sslmode=disable
 
 - `DATABASE_URL`
 - `APP_TOKEN_SECRET`
+- `SERVER_ADDRESS`
 - `PORT`
 
 ## 数据库初始化
@@ -159,6 +169,7 @@ psql -U postgres -d japanese_learning -f migrations/005_post_reading_quiz_v06.sq
 psql -U postgres -d japanese_learning -f migrations/006_vocabulary_review_v07.sql
 psql -U postgres -d japanese_learning -f migrations/007_ai_cache_logs_v08.sql
 psql -U postgres -d japanese_learning -f seeds/001_seed.sql
+psql -U postgres -d japanese_learning -f seeds/002_mvp_seed_v09.sql
 ```
 
 如果已经跑过旧版本，再按尚未执行过的版本追加执行：
@@ -170,6 +181,7 @@ psql -U postgres -d japanese_learning -f migrations/004_challenge_metadata_v05_f
 psql -U postgres -d japanese_learning -f migrations/005_post_reading_quiz_v06.sql
 psql -U postgres -d japanese_learning -f migrations/006_vocabulary_review_v07.sql
 psql -U postgres -d japanese_learning -f migrations/007_ai_cache_logs_v08.sql
+psql -U postgres -d japanese_learning -f seeds/002_mvp_seed_v09.sql
 ```
 
 ## 运行
@@ -198,6 +210,28 @@ go run ./cmd/server
 http://localhost:8080
 ```
 
+健康检查：
+
+```text
+http://localhost:8080/api/health
+```
+
+## Docker 运行
+
+复制环境变量示例后按需修改：
+
+```bash
+copy .env.example .env
+```
+
+启动 PostgreSQL 和应用：
+
+```bash
+docker compose up --build
+```
+
+首次启动后需要在数据库容器中执行迁移和 seed，或用本机 `psql` 连接 compose 暴露的 PostgreSQL 后执行上面的初始化 SQL。
+
 ## 当前说明
 
 - `v0.2` 的非日语转日语目前仍是占位翻译服务，用于先打通上传和处理流程。后续接入真实 AI 翻译后，只需要替换 `internal/service/translation_service.go`。
@@ -207,6 +241,7 @@ http://localhost:8080
 - `v0.6` 的阅读后测验题目前复用占位题目生成逻辑，优先围绕文章句子中可匹配或可生成的词条出中文释义选择题。后续接入真实 AI 后，继续替换 `internal/service/challenge_service.go` 中的 post quiz 生成逻辑。
 - `v0.7` 的词汇复习题目前复用占位干扰项生成逻辑，正确答案来自词典 `primary_meaning_zh`。后续接入真实 AI 后，主要替换 `internal/service/review_service.go` 中的复习题生成逻辑。
 - `v0.8-review` 已把当前所有占位 AI 生成路径接入统一 AI 缓存和日志，包括翻译、词典、挑战阅读题、阅读后测验题和词汇复习题。后续接入真实 AI 时可以沿用 `internal/service/ai_service.go` 和 `ai_cache` / `ai_logs` 表。
+- `v0.9` 仍是单体 MVP 形态，部署配置只负责启动应用和 PostgreSQL；迁移执行仍保留为显式步骤，避免应用启动时自动改库。
 
 ## v0.5 Review 记录
 
@@ -281,3 +316,15 @@ http://localhost:8080
 - 挑战阅读题、阅读后测验题、词汇复习题生成通过 `AIService` 读写缓存和日志。
 - `GET /api/reading/articles/{id}/post-quiz/results` 可返回当前用户在指定文章下的阅读后测验答题记录和题目信息。
 - `GET /api/review/records` 可返回当前用户的词汇复习记录、题目、生词和词典信息。
+
+## v0.9 验证记录
+
+本轮完成 MVP 发布前联调收尾，重点处理前端交互稳定性、部署入口和测试数据。
+
+已验证：
+
+- `go test ./...` 通过。
+- `GET /api/health` 返回 `status = ok` 和 `version = v0.9`。
+- 前端全局 loading、请求超时提示、空列表状态和查词防重复请求已接入。
+- Dockerfile、docker-compose、`.env.example` 已加入基础部署配置。
+- `seeds/002_mvp_seed_v09.sql` 已加入 1 篇 MVP 内置文章和 2 条词典测试数据。

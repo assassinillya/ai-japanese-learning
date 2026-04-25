@@ -32,11 +32,14 @@ const state = {
     currentEntry: null,
     currentGenerated: false,
     lastLookupKey: "",
+    inFlightKey: "",
   },
+  pendingRequests: 0,
 };
 
 const views = document.querySelectorAll(".view");
 const messageBox = document.getElementById("message-box");
+const globalLoading = document.getElementById("global-loading");
 const authStatus = document.getElementById("auth-status");
 const homeGreeting = document.getElementById("home-greeting");
 const profileSummary = document.getElementById("profile-summary");
@@ -91,6 +94,11 @@ const reprocessButton = document.getElementById("reprocess-button");
 document.querySelectorAll("[data-view]").forEach((button) => {
   button.addEventListener("click", async () => {
     const view = button.dataset.view;
+    if (!state.user && !["login", "register"].includes(view)) {
+      setMessage("请先登录或注册");
+      showView("login");
+      return;
+    }
     if (view === "vocabulary" && state.user) {
       await loadVocabularyList();
     }
@@ -107,6 +115,7 @@ document.getElementById("register-form").addEventListener("submit", async (event
   const result = await request("/api/auth/register", {
     method: "POST",
     body: JSON.stringify(payload),
+    loadingMessage: "正在注册账号...",
   });
   handleAuthResult(result, "注册成功");
 });
@@ -117,6 +126,7 @@ document.getElementById("login-form").addEventListener("submit", async (event) =
   const result = await request("/api/auth/login", {
     method: "POST",
     body: JSON.stringify(payload),
+    loadingMessage: "正在登录...",
   });
   handleAuthResult(result, "登录成功");
 });
@@ -144,6 +154,7 @@ document.getElementById("jlpt-form").addEventListener("submit", async (event) =>
   const result = await request("/api/profile/jlpt-level", {
     method: "PUT",
     body: JSON.stringify(payload),
+    loadingMessage: "正在保存 JLPT 等级...",
   });
   if (result.ok) {
     state.user = result.data;
@@ -158,6 +169,8 @@ document.getElementById("article-form").addEventListener("submit", async (event)
   const result = await request("/api/articles/upload", {
     method: "POST",
     body: JSON.stringify(payload),
+    loadingMessage: "正在上传并处理文章...",
+    timeoutMs: 60000,
   });
   if (!result.ok) {
     return;
@@ -176,6 +189,8 @@ reprocessButton.addEventListener("click", async () => {
   }
   const result = await request(`/api/articles/${state.selectedArticleId}/process`, {
     method: "POST",
+    loadingMessage: "正在重新处理文章...",
+    timeoutMs: 60000,
   });
   if (!result.ok) {
     return;
@@ -225,6 +240,7 @@ addVocabularyButton.addEventListener("click", async () => {
   const result = await request("/api/vocabulary", {
     method: "POST",
     body: JSON.stringify(payload),
+    loadingMessage: "正在加入生词本...",
   });
   if (!result.ok) {
     return;
@@ -252,6 +268,7 @@ vocabularyStatusButtons.forEach((button) => {
     const result = await request(`/api/vocabulary/${state.selectedVocabularyId}/status`, {
       method: "PUT",
       body: JSON.stringify({ status: button.dataset.vocabularyStatus }),
+      loadingMessage: "正在更新生词状态...",
     });
     if (!result.ok) {
       return;
@@ -269,6 +286,7 @@ deleteVocabularyButton.addEventListener("click", async () => {
   const vocabularyId = state.selectedVocabularyId;
   const result = await request(`/api/vocabulary/${vocabularyId}`, {
     method: "DELETE",
+    loadingMessage: "正在删除生词...",
   });
   if (!result.ok) {
     return;
@@ -315,6 +333,7 @@ submitChallengeAnswerButton.addEventListener("click", async () => {
   const result = await request(`/api/reading/questions/${question.id}/answer`, {
     method: "POST",
     body: JSON.stringify({ selected_option: state.challenge.selectedOption }),
+    loadingMessage: "正在提交答案...",
   });
   if (!result.ok) {
     return;
@@ -362,6 +381,7 @@ submitPostQuizAnswerButton.addEventListener("click", async () => {
   const result = await request(`/api/reading/questions/${question.id}/answer`, {
     method: "POST",
     body: JSON.stringify({ selected_option: state.postQuiz.selectedOption }),
+    loadingMessage: "正在提交测验答案...",
   });
   if (!result.ok) {
     return;
@@ -413,6 +433,7 @@ submitReviewAnswerButton.addEventListener("click", async () => {
       review_question_id: item.question.id,
       selected_option: state.review.selectedOption,
     }),
+    loadingMessage: "正在提交复习答案...",
   });
   if (!result.ok) {
     return;
@@ -537,11 +558,16 @@ function handleAuthResult(result, successMessage) {
 }
 
 async function loadLibrary() {
+  libraryList.innerHTML = `<li class="empty-state">正在加载内置文章...</li>`;
   const result = await request("/api/articles/library");
   if (!result.ok) {
     return;
   }
   const items = result.data.items || [];
+  if (items.length === 0) {
+    libraryList.innerHTML = `<li class="empty-state">暂无内置文章。</li>`;
+    return;
+  }
   libraryList.innerHTML = items
     .map(
       (article) => `
@@ -559,11 +585,16 @@ async function loadLibrary() {
 }
 
 async function loadArticles() {
+  articleList.innerHTML = `<li class="empty-state">正在加载我的文章...</li>`;
   const result = await request("/api/articles");
   if (!result.ok) {
     return;
   }
   const items = result.data.items || [];
+  if (items.length === 0) {
+    articleList.innerHTML = `<li class="empty-state">还没有上传文章。可以先去“上传文章”创建第一篇。</li>`;
+    return;
+  }
   articleList.innerHTML = items
     .map(
       (article) => `
@@ -609,12 +640,16 @@ async function loadArticleDetail(articleId) {
   sentenceList.innerHTML = (sentenceResult.data.items || [])
     .map((sentence) => `<li>${escapeHTML(sentence.sentence_text)}</li>`)
     .join("");
+  if (!sentenceList.innerHTML) {
+    sentenceList.innerHTML = `<li class="empty-state">当前文章还没有句子拆分结果，可以尝试重新处理。</li>`;
+  }
 
   reprocessButton.disabled = article.source_type === "builtin";
   reprocessButton.title = article.source_type === "builtin" ? "内置文章无需重新处理" : "";
 }
 
 async function loadReadingArticle(articleId) {
+  readingContent.innerHTML = `<div class="empty-state">正在加载阅读内容...</div>`;
   const result = await request(`/api/reading/articles/${articleId}`);
   if (!result.ok) {
     return;
@@ -640,10 +675,15 @@ async function loadReadingArticle(articleId) {
       `,
     )
     .join("");
+  if (!readingContent.innerHTML) {
+    readingContent.innerHTML = `<div class="empty-state">当前文章没有可阅读句子。</div>`;
+  }
 }
 
 async function loadChallengeQuestions(articleId) {
-  const result = await request(`/api/reading/articles/${articleId}/challenge-questions`);
+  challengeHeader.textContent = "正在生成或加载挑战阅读题...";
+  challengeCard.classList.add("hidden");
+  const result = await request(`/api/reading/articles/${articleId}/challenge-questions`, { timeoutMs: 60000 });
   if (!result.ok) {
     return;
   }
@@ -668,7 +708,9 @@ async function loadChallengeQuestions(articleId) {
 }
 
 async function loadPostQuizQuestions(articleId) {
-  const result = await request(`/api/reading/articles/${articleId}/post-quiz`);
+  postQuizHeader.textContent = "正在生成或加载阅读后测验题...";
+  postQuizCard.classList.add("hidden");
+  const result = await request(`/api/reading/articles/${articleId}/post-quiz`, { timeoutMs: 60000 });
   if (!result.ok) {
     return;
   }
@@ -778,7 +820,9 @@ function renderPostQuizQuestion() {
 }
 
 async function loadReviewDue() {
-  const result = await request("/api/review/due");
+  reviewHeader.textContent = "正在加载今日待复习生词...";
+  reviewCard.classList.add("hidden");
+  const result = await request("/api/review/due", { timeoutMs: 60000 });
   if (!result.ok) {
     return;
   }
@@ -846,12 +890,17 @@ function renderReviewQuestion() {
 
 async function loadVocabularyList() {
   const suffix = state.vocabularyFilter ? `?status=${encodeURIComponent(state.vocabularyFilter)}` : "";
+  vocabularyList.innerHTML = `<li class="empty-state">正在加载生词本...</li>`;
   const result = await request(`/api/vocabulary${suffix}`);
   if (!result.ok) {
     return;
   }
 
   const items = result.data.items || [];
+  if (items.length === 0) {
+    vocabularyList.innerHTML = `<li class="empty-state">当前筛选下没有生词。阅读文章时框选词语即可加入。</li>`;
+    return;
+  }
   vocabularyList.innerHTML = items
     .map(
       (detail) => `
@@ -944,6 +993,10 @@ function getSelectionState() {
   if (!text || (!withinReading && !withinChallenge)) {
     return null;
   }
+  if (text.length > 40) {
+    setMessage("查词文本过长，请选择一个词或短语");
+    return null;
+  }
 
   const sentenceElement = findSentenceElement(range.commonAncestorContainer);
   if (!sentenceElement) {
@@ -981,6 +1034,9 @@ async function lookupSelection(selectionState) {
   addVocabularyButton.textContent = "加入生词本";
 
   const lookupKey = `${selectionState.text}:${selectionState.sentenceId}:${selectionState.contextSnippet}`;
+  if (state.lookup.inFlightKey === lookupKey) {
+    return;
+  }
   state.lookup.currentText = selectionState.text;
   state.lookup.currentSentenceId = selectionState.sentenceId;
   state.lookup.currentSentenceText = selectionState.sentenceText;
@@ -992,17 +1048,25 @@ async function lookupSelection(selectionState) {
     return;
   }
 
-  const lookupResult = await request(`/api/dictionary/lookup?text=${encodeURIComponent(selectionState.text)}`);
-  if (!lookupResult.ok) {
-    popupBody.textContent = "词典查询失败。";
-    return;
-  }
+  state.lookup.inFlightKey = lookupKey;
+  try {
+    const lookupResult = await request(`/api/dictionary/lookup?text=${encodeURIComponent(selectionState.text)}`, {
+      loadingMessage: "正在查词...",
+      timeoutMs: 60000,
+    });
+    if (!lookupResult.ok) {
+      popupBody.textContent = "词典查询失败，可以重新选择文本再试。";
+      return;
+    }
 
-  state.lookup.currentEntry = lookupResult.data.entry;
-  state.lookup.currentGenerated = lookupResult.data.generated;
-  state.lookup.lastLookupKey = lookupKey;
-  popupBody.textContent = formatDictionaryEntry(lookupResult.data.entry, lookupResult.data.generated, selectionState.contextSnippet);
-  await refreshVocabularyButton(lookupResult.data.entry.id);
+    state.lookup.currentEntry = lookupResult.data.entry;
+    state.lookup.currentGenerated = lookupResult.data.generated;
+    state.lookup.lastLookupKey = lookupKey;
+    popupBody.textContent = formatDictionaryEntry(lookupResult.data.entry, lookupResult.data.generated, selectionState.contextSnippet);
+    await refreshVocabularyButton(lookupResult.data.entry.id);
+  } finally {
+    state.lookup.inFlightKey = "";
+  }
 }
 
 async function refreshVocabularyButton(entryId) {
@@ -1092,14 +1156,22 @@ function extractContextSnippet(sentenceText, selectedText) {
 }
 
 async function request(url, options = {}) {
+  const { loadingMessage, timeoutMs = 30000, headers = {}, ...fetchOptions } = options;
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+  if (loadingMessage) {
+    setMessage(loadingMessage);
+  }
+  setGlobalLoading(true);
   try {
     const response = await fetch(url, {
       headers: {
         "Content-Type": "application/json",
         ...(state.token ? { Authorization: `Bearer ${state.token}` } : {}),
-        ...(options.headers || {}),
+        ...headers,
       },
-      ...options,
+      ...fetchOptions,
+      signal: controller.signal,
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -1108,13 +1180,25 @@ async function request(url, options = {}) {
     }
     return { ok: true, data };
   } catch (error) {
-    setMessage(`网络错误：${error.message}`);
+    setMessage(error.name === "AbortError" ? "请求超时，请稍后重试" : `网络错误：${error.message}`);
     return { ok: false, data: null };
+  } finally {
+    window.clearTimeout(timeout);
+    setGlobalLoading(false);
   }
 }
 
 function setMessage(message) {
   messageBox.textContent = message;
+}
+
+function setGlobalLoading(active) {
+  state.pendingRequests += active ? 1 : -1;
+  if (state.pendingRequests < 0) {
+    state.pendingRequests = 0;
+  }
+  globalLoading.classList.toggle("hidden", state.pendingRequests === 0);
+  document.body.toggleAttribute("aria-busy", state.pendingRequests > 0);
 }
 
 function escapeHTML(input) {

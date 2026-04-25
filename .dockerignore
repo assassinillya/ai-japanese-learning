@@ -1,0 +1,7 @@
+.git
+.gocache
+password.json
+*.exe
+*.log
+tmp
+node_modules

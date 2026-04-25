@@ -55,6 +55,7 @@ func NewRouter(
 	r.mux.Handle("/", static.Handler())
 
 	r.mux.HandleFunc("POST /api/auth/register", r.handleRegister)
+	r.mux.HandleFunc("GET /api/health", r.handleHealth)
 	r.mux.HandleFunc("POST /api/auth/login", r.handleLogin)
 	r.mux.HandleFunc("POST /api/auth/logout", r.withAuth(r.handleLogout))
 	r.mux.HandleFunc("GET /api/auth/me", r.withAuth(r.handleMe))
@@ -89,6 +90,13 @@ func NewRouter(
 	r.mux.HandleFunc("GET /api/review/records", r.withAuth(r.handleReviewRecords))
 
 	return r
+}
+
+func (r *Router) handleHealth(w http.ResponseWriter, req *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{
+		"status":  "ok",
+		"version": "v0.9",
+	})
 }
 
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
