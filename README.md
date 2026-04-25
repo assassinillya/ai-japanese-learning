@@ -24,6 +24,8 @@
 - 挑战阅读题查询接口 `GET /api/reading/articles/{id}/challenge-questions`
 - 挑战阅读答题接口 `POST /api/reading/questions/{id}/answer`
 - 挑战阅读题缓存入库与答题记录保存
+- 挑战阅读答题会校验当前用户是否可访问题目所属文章
+- 挑战阅读题保存题型、JLPT、AI 模型和 Prompt 版本元数据，便于后续扩展阅读后测验
 - 挑战阅读页面、进度展示、正误反馈、下一题流程
 - 静态前端页面：登录、注册、首页、个人中心、文章上传、文章详情、阅读模式、查词弹窗
 
@@ -44,6 +46,8 @@
 - `v0.5`
   - 按文章顺序生成挑战阅读题，并缓存到数据库。
   - 支持四选一答题、答题记录保存、答案解析展示。
+  - 答题接口会校验当前用户只能回答自己可访问文章下的题目。
+  - 题目表补充题型、JLPT、AI 模型和 Prompt 版本元数据。
   - 前端新增挑战阅读页面，支持进度、提交答案和下一题。
   - 挑战题句子中仍可选中文本继续查词。
 
@@ -110,14 +114,18 @@ CREATE DATABASE japanese_learning;
 
 ```bash
 psql -U postgres -d japanese_learning -f migrations/001_init.sql
+psql -U postgres -d japanese_learning -f migrations/002_articles_v02.sql
+psql -U postgres -d japanese_learning -f migrations/003_challenge_reading_v05.sql
+psql -U postgres -d japanese_learning -f migrations/004_challenge_metadata_v05_fix.sql
 psql -U postgres -d japanese_learning -f seeds/001_seed.sql
 ```
 
-如果已经跑过 `v0.1`，再追加执行：
+如果已经跑过旧版本，再按尚未执行过的版本追加执行：
 
 ```bash
 psql -U postgres -d japanese_learning -f migrations/002_articles_v02.sql
 psql -U postgres -d japanese_learning -f migrations/003_challenge_reading_v05.sql
+psql -U postgres -d japanese_learning -f migrations/004_challenge_metadata_v05_fix.sql
 ```
 
 ## 运行
@@ -152,3 +160,29 @@ http://localhost:8080
 - `v0.3` 的词典生成目前也是占位实现，用于先打通阅读查词和生词本流程。后续接入真实 AI 词条生成后，主要替换 `internal/service/dictionary_service.go`。
 - `v0.4` 的上下文例句目前来自查词时所在句子或就近半句，保存在生词本的 `source_sentence_text` 中，供后续复习和详情展示使用。
 - `v0.5` 的挑战题生成和干扰项目前仍是占位算法实现，用于先打通挑战阅读与题目缓存流程。后续接入真实 AI 后，主要替换 `internal/service/challenge_service.go`。
+
+## v0.5 Review 记录
+
+本轮 review 覆盖 `v0.1` 到 `v0.5` 的文档、迁移、后端服务、静态前端和本地 PostgreSQL 初始化流程。
+
+已确认：
+
+- `v0.1` 用户、资料、会话、JLPT、基础文章、句子、词典、生词表结构已落地。
+- `v0.2` 文章上传、语言检测、占位翻译、文章处理和句子拆分流程已落地。
+- `v0.3` 阅读页、鼠标框选延迟查词、词典占位生成、加入生词本和已加入状态查询已落地。
+- `v0.4` 生词本列表、状态筛选、详情、上下文保存、状态修改和删除已落地。
+- `v0.5` 挑战阅读题生成、缓存、答题记录、前端答题反馈和下一题流程已落地。
+
+本轮修复：
+
+- 修复 README 新环境初始化步骤遗漏 `002`、`003`、`004` 迁移的问题。
+- 修复挑战阅读答题接口只按题目 ID 查询、缺少文章访问权限校验的问题。
+- 为挑战题补充 `question_type`、`jlpt_level`、`ai_model`、`prompt_version` 字段，降低后续扩展阅读后测验时的迁移成本。
+- 新增 `migrations/004_challenge_metadata_v05_fix.sql`，用于旧库无损补齐挑战题元数据字段。
+
+验证结果：
+
+- `go test ./...` 通过。
+- 本地 PostgreSQL 已创建 `japanese_learning` 数据库并执行 `001` 到 `004` 迁移和 seed。
+- 当前种子数据包含 2 篇文章、3 条文章句子、2 条词典条目。
+- 本地服务可启动并通过 `http://localhost:8080` 访问。

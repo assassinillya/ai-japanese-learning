@@ -51,7 +51,8 @@ func (s *ChallengeService) GetOrGenerate(ctx context.Context, userID, articleID 
 }
 
 func (s *ChallengeService) Generate(ctx context.Context, userID, articleID int64) ([]model.ChallengeQuestion, error) {
-	if _, err := s.articleRepo.GetAccessible(ctx, userID, articleID); err != nil {
+	article, err := s.articleRepo.GetAccessible(ctx, userID, articleID)
+	if err != nil {
 		return nil, err
 	}
 
@@ -83,10 +84,13 @@ func (s *ChallengeService) Generate(ctx context.Context, userID, articleID int64
 		if err != nil {
 			return nil, err
 		}
+		aiModel := "placeholder-challenge-generator"
+		promptVersion := "v0.5"
 
 		questions = append(questions, model.ChallengeQuestion{
 			ArticleID:         articleID,
 			SentenceID:        sentence.ID,
+			QuestionType:      "challenge_reading",
 			QuestionOrder:     len(questions) + 1,
 			SentenceText:      sentence.SentenceText,
 			MaskedSentence:    masked,
@@ -98,6 +102,9 @@ func (s *ChallengeService) Generate(ctx context.Context, userID, articleID int64
 			OptionD:           options[3],
 			CorrectOption:     correctOption,
 			Explanation:       explanation,
+			JLPTLevel:         string(article.JLPTLevel),
+			AIModel:           &aiModel,
+			PromptVersion:     &promptVersion,
 		})
 
 		if len(questions) >= 5 {
@@ -120,7 +127,7 @@ func (s *ChallengeService) SubmitAnswer(ctx context.Context, userID, questionID 
 		return nil, fmt.Errorf("invalid selected option")
 	}
 
-	question, err := s.challengeRepo.GetByID(ctx, questionID)
+	question, err := s.challengeRepo.GetAccessibleByID(ctx, userID, questionID)
 	if err != nil {
 		return nil, err
 	}

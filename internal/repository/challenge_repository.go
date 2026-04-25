@@ -21,9 +21,9 @@ func NewChallengeRepository(db *sql.DB) *ChallengeRepository {
 
 func (r *ChallengeRepository) ListByArticle(ctx context.Context, articleID int64) ([]model.ChallengeQuestion, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, article_id, sentence_id, question_order, sentence_text, masked_sentence,
+		SELECT id, article_id, sentence_id, question_type, question_order, sentence_text, masked_sentence,
 		       correct_entry_id, correct_answer_text, option_a, option_b, option_c, option_d,
-		       correct_option, explanation, created_at
+		       correct_option, explanation, jlpt_level, ai_model, prompt_version, created_at
 		FROM challenge_questions
 		WHERE article_id = $1
 		ORDER BY question_order ASC
@@ -46,9 +46,9 @@ func (r *ChallengeRepository) ListByArticle(ctx context.Context, articleID int64
 
 func (r *ChallengeRepository) GetByID(ctx context.Context, questionID int64) (*model.ChallengeQuestion, error) {
 	row := r.db.QueryRowContext(ctx, `
-		SELECT id, article_id, sentence_id, question_order, sentence_text, masked_sentence,
+		SELECT id, article_id, sentence_id, question_type, question_order, sentence_text, masked_sentence,
 		       correct_entry_id, correct_answer_text, option_a, option_b, option_c, option_d,
-		       correct_option, explanation, created_at
+		       correct_option, explanation, jlpt_level, ai_model, prompt_version, created_at
 		FROM challenge_questions
 		WHERE id = $1
 	`, questionID)
@@ -59,6 +59,27 @@ func (r *ChallengeRepository) GetByID(ctx context.Context, questionID int64) (*m
 			return nil, ErrChallengeQuestionNotFound
 		}
 		return nil, fmt.Errorf("get challenge question: %w", err)
+	}
+	return question, nil
+}
+
+func (r *ChallengeRepository) GetAccessibleByID(ctx context.Context, userID, questionID int64) (*model.ChallengeQuestion, error) {
+	row := r.db.QueryRowContext(ctx, `
+		SELECT q.id, q.article_id, q.sentence_id, q.question_type, q.question_order, q.sentence_text, q.masked_sentence,
+		       q.correct_entry_id, q.correct_answer_text, q.option_a, q.option_b, q.option_c, q.option_d,
+		       q.correct_option, q.explanation, q.jlpt_level, q.ai_model, q.prompt_version, q.created_at
+		FROM challenge_questions q
+		INNER JOIN articles a ON a.id = q.article_id
+		WHERE q.id = $1
+		  AND (a.user_id = $2 OR a.source_type = 'builtin')
+	`, questionID, userID)
+
+	question, err := scanChallengeQuestion(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrChallengeQuestionNotFound
+		}
+		return nil, fmt.Errorf("get accessible challenge question: %w", err)
 	}
 	return question, nil
 }
@@ -78,15 +99,16 @@ func (r *ChallengeRepository) ReplaceByArticle(ctx context.Context, articleID in
 		q := &questions[idx]
 		if err := tx.QueryRowContext(ctx, `
 			INSERT INTO challenge_questions (
-				article_id, sentence_id, question_order, sentence_text, masked_sentence,
+				article_id, sentence_id, question_type, question_order, sentence_text, masked_sentence,
 				correct_entry_id, correct_answer_text, option_a, option_b, option_c, option_d,
-				correct_option, explanation
+				correct_option, explanation, jlpt_level, ai_model, prompt_version
 			)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 			RETURNING id, created_at
 		`,
 			q.ArticleID,
 			q.SentenceID,
+			q.QuestionType,
 			q.QuestionOrder,
 			q.SentenceText,
 			q.MaskedSentence,
@@ -98,6 +120,9 @@ func (r *ChallengeRepository) ReplaceByArticle(ctx context.Context, articleID in
 			q.OptionD,
 			q.CorrectOption,
 			q.Explanation,
+			q.JLPTLevel,
+			q.AIModel,
+			q.PromptVersion,
 		).Scan(&q.ID, &q.CreatedAt); err != nil {
 			return fmt.Errorf("insert challenge question: %w", err)
 		}
@@ -132,6 +157,7 @@ func scanChallengeQuestion(scanner challengeQuestionScanner) (*model.ChallengeQu
 		&q.ID,
 		&q.ArticleID,
 		&q.SentenceID,
+		&q.QuestionType,
 		&q.QuestionOrder,
 		&q.SentenceText,
 		&q.MaskedSentence,
@@ -143,6 +169,9 @@ func scanChallengeQuestion(scanner challengeQuestionScanner) (*model.ChallengeQu
 		&q.OptionD,
 		&q.CorrectOption,
 		&q.Explanation,
+		&q.JLPTLevel,
+		&q.AIModel,
+		&q.PromptVersion,
 		&q.CreatedAt,
 	); err != nil {
 		return nil, err

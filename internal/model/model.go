@@ -143,6 +143,7 @@ type ChallengeQuestion struct {
 	ID                int64     `json:"id"`
 	ArticleID         int64     `json:"article_id"`
 	SentenceID        int64     `json:"sentence_id"`
+	QuestionType      string    `json:"question_type"`
 	QuestionOrder     int       `json:"question_order"`
 	SentenceText      string    `json:"sentence_text"`
 	MaskedSentence    string    `json:"masked_sentence"`
@@ -154,6 +155,9 @@ type ChallengeQuestion struct {
 	OptionD           string    `json:"option_d"`
 	CorrectOption     string    `json:"correct_option"`
 	Explanation       string    `json:"explanation"`
+	JLPTLevel         string    `json:"jlpt_level"`
+	AIModel           *string   `json:"ai_model,omitempty"`
+	PromptVersion     *string   `json:"prompt_version,omitempty"`
 	CreatedAt         time.Time `json:"created_at"`
 }
 
