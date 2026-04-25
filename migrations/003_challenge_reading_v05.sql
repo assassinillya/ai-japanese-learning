@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS challenge_questions (
     prompt_version TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (article_id, question_order)
+    UNIQUE (article_id, question_type, question_order)
 );
 
 CREATE TABLE IF NOT EXISTS challenge_question_attempts (

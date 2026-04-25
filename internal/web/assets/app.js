@@ -11,6 +11,12 @@ const state = {
     selectedOption: "",
     answered: false,
   },
+  postQuiz: {
+    questions: [],
+    currentIndex: 0,
+    selectedOption: "",
+    answered: false,
+  },
   lookup: {
     timer: null,
     currentText: "",
@@ -40,6 +46,13 @@ const challengeProgress = document.getElementById("challenge-progress");
 const challengeSentence = document.getElementById("challenge-sentence");
 const challengeOptions = document.getElementById("challenge-options");
 const challengeFeedback = document.getElementById("challenge-feedback");
+const postQuizHeader = document.getElementById("post-quiz-header");
+const postQuizCard = document.getElementById("post-quiz-card");
+const postQuizProgress = document.getElementById("post-quiz-progress");
+const postQuizQuestion = document.getElementById("post-quiz-question");
+const postQuizSource = document.getElementById("post-quiz-source");
+const postQuizOptions = document.getElementById("post-quiz-options");
+const postQuizFeedback = document.getElementById("post-quiz-feedback");
 const vocabularyList = document.getElementById("vocabulary-list");
 const vocabularyDetail = document.getElementById("vocabulary-detail");
 const vocabularyFilterForm = document.getElementById("vocabulary-filter-form");
@@ -53,8 +66,11 @@ const popupBody = document.getElementById("lookup-popup-body");
 const addVocabularyButton = document.getElementById("add-vocabulary-button");
 const openReadingButton = document.getElementById("open-reading-button");
 const openChallengeButton = document.getElementById("open-challenge-button");
+const openPostQuizButton = document.getElementById("open-post-quiz-button");
 const submitChallengeAnswerButton = document.getElementById("submit-challenge-answer-button");
 const nextChallengeQuestionButton = document.getElementById("next-challenge-question-button");
+const submitPostQuizAnswerButton = document.getElementById("submit-post-quiz-answer-button");
+const nextPostQuizQuestionButton = document.getElementById("next-post-quiz-question-button");
 const reprocessButton = document.getElementById("reprocess-button");
 
 document.querySelectorAll("[data-view]").forEach((button) => {
@@ -166,6 +182,15 @@ openChallengeButton.addEventListener("click", async () => {
   }
   await loadChallengeQuestions(state.selectedArticleId);
   showView("challenge");
+});
+
+openPostQuizButton.addEventListener("click", async () => {
+  if (!state.selectedArticleId) {
+    setMessage("请先选择一篇文章");
+    return;
+  }
+  await loadPostQuizQuestions(state.selectedArticleId);
+  showView("post-quiz");
 });
 
 addVocabularyButton.addEventListener("click", async () => {
@@ -301,6 +326,53 @@ nextChallengeQuestionButton.addEventListener("click", () => {
   renderChallengeQuestion();
 });
 
+submitPostQuizAnswerButton.addEventListener("click", async () => {
+  const question = state.postQuiz.questions[state.postQuiz.currentIndex];
+  if (!question) {
+    setMessage("当前没有可作答的测验题");
+    return;
+  }
+  if (!state.postQuiz.selectedOption) {
+    setMessage("请先选择一个选项");
+    return;
+  }
+  if (state.postQuiz.answered) {
+    setMessage("这题已经提交过了");
+    return;
+  }
+
+  const result = await request(`/api/reading/questions/${question.id}/answer`, {
+    method: "POST",
+    body: JSON.stringify({ selected_option: state.postQuiz.selectedOption }),
+  });
+  if (!result.ok) {
+    return;
+  }
+
+  state.postQuiz.answered = true;
+  postQuizFeedback.classList.remove("hidden");
+  postQuizFeedback.textContent = [
+    result.data.is_correct ? "回答正确" : "回答错误",
+    `正确选项：${result.data.correct_option}`,
+    `正确答案：${result.data.correct_answer_text}`,
+    `解析：${result.data.explanation}`,
+  ].join("\n");
+  renderPostQuizQuestion();
+});
+
+nextPostQuizQuestionButton.addEventListener("click", () => {
+  if (state.postQuiz.currentIndex + 1 >= state.postQuiz.questions.length) {
+    setMessage("阅读后测验已完成");
+    return;
+  }
+  state.postQuiz.currentIndex += 1;
+  state.postQuiz.selectedOption = "";
+  state.postQuiz.answered = false;
+  postQuizFeedback.classList.add("hidden");
+  postQuizFeedback.textContent = "";
+  renderPostQuizQuestion();
+});
+
 readingContent.addEventListener("mouseup", () => {
   scheduleLookupFromSelection();
 });
@@ -353,6 +425,8 @@ function renderUser() {
     readingContent.innerHTML = "";
     challengeHeader.textContent = "请选择一篇文章开始挑战阅读。";
     challengeCard.classList.add("hidden");
+    postQuizHeader.textContent = "请选择一篇文章开始测验。";
+    postQuizCard.classList.add("hidden");
     vocabularyList.innerHTML = "";
     vocabularyDetail.textContent = "请选择一个生词查看详情。";
     openVocabularyArticleButton.disabled = true;
@@ -519,6 +593,31 @@ async function loadChallengeQuestions(articleId) {
   renderChallengeQuestion();
 }
 
+async function loadPostQuizQuestions(articleId) {
+  const result = await request(`/api/reading/articles/${articleId}/post-quiz`);
+  if (!result.ok) {
+    return;
+  }
+
+  state.postQuiz.questions = result.data.items || [];
+  state.postQuiz.currentIndex = 0;
+  state.postQuiz.selectedOption = "";
+  state.postQuiz.answered = false;
+  hideLookupPopup();
+
+  if (state.postQuiz.questions.length === 0) {
+    postQuizHeader.textContent = "当前文章还没有可用的测验题。";
+    postQuizCard.classList.add("hidden");
+    return;
+  }
+
+  postQuizHeader.textContent = "阅读后测验会基于文章中的重点词汇出题。";
+  postQuizCard.classList.remove("hidden");
+  postQuizFeedback.classList.add("hidden");
+  postQuizFeedback.textContent = "";
+  renderPostQuizQuestion();
+}
+
 function renderChallengeQuestion() {
   const question = state.challenge.questions[state.challenge.currentIndex];
   if (!question) {
@@ -560,6 +659,48 @@ function renderChallengeQuestion() {
 
   submitChallengeAnswerButton.disabled = state.challenge.answered;
   nextChallengeQuestionButton.disabled = !state.challenge.answered;
+}
+
+function renderPostQuizQuestion() {
+  const question = state.postQuiz.questions[state.postQuiz.currentIndex];
+  if (!question) {
+    postQuizCard.classList.add("hidden");
+    return;
+  }
+
+  postQuizProgress.textContent = `第 ${state.postQuiz.currentIndex + 1} / ${state.postQuiz.questions.length} 题`;
+  postQuizQuestion.textContent = question.masked_sentence;
+  postQuizSource.textContent = `原句：${question.sentence_text}`;
+
+  const options = [
+    ["A", question.option_a],
+    ["B", question.option_b],
+    ["C", question.option_c],
+    ["D", question.option_d],
+  ];
+  postQuizOptions.innerHTML = options
+    .map(([key, value]) => {
+      const selected = state.postQuiz.selectedOption === key;
+      const isCorrect = state.postQuiz.answered && question.correct_option === key;
+      const isIncorrect = state.postQuiz.answered && selected && question.correct_option !== key;
+      const className = ["challenge-option", isCorrect ? "correct" : "", isIncorrect ? "incorrect" : ""].filter(Boolean).join(" ");
+      return `
+        <label class="${className}">
+          <input type="radio" name="post-quiz-option" value="${key}" ${selected ? "checked" : ""} ${state.postQuiz.answered ? "disabled" : ""} />
+          <span>${key}. ${escapeHTML(value)}</span>
+        </label>
+      `;
+    })
+    .join("");
+
+  postQuizOptions.querySelectorAll('input[name="post-quiz-option"]').forEach((input) => {
+    input.addEventListener("change", () => {
+      state.postQuiz.selectedOption = input.value;
+    });
+  });
+
+  submitPostQuizAnswerButton.disabled = state.postQuiz.answered;
+  nextPostQuizQuestionButton.disabled = !state.postQuiz.answered;
 }
 
 async function loadVocabularyList() {

@@ -1,6 +1,6 @@
-# ai-japanese-learning v0.5
+# ai-japanese-learning v0.6
 
-当前版本已经从 `v0.4` 推进到 `v0.5`，实现了挑战阅读模式主流程。
+当前版本已经从 `v0.5` 推进到 `v0.6`，实现了阅读后测验模式主流程。
 
 已完成：
 
@@ -27,6 +27,10 @@
 - 挑战阅读答题会校验当前用户是否可访问题目所属文章
 - 挑战阅读题保存题型、JLPT、AI 模型和 Prompt 版本元数据，便于后续扩展阅读后测验
 - 挑战阅读页面、进度展示、正误反馈、下一题流程
+- 阅读后测验题生成接口 `POST /api/reading/articles/{id}/post-quiz`
+- 阅读后测验题查询接口 `GET /api/reading/articles/{id}/post-quiz`
+- 阅读后测验题缓存入库，与挑战阅读题按 `question_type` 隔离
+- 阅读后测验页面、进度展示、正误反馈、下一题流程
 - 静态前端页面：登录、注册、首页、个人中心、文章上传、文章详情、阅读模式、查词弹窗
 
 ## 版本记录
@@ -50,6 +54,11 @@
   - 题目表补充题型、JLPT、AI 模型和 Prompt 版本元数据。
   - 前端新增挑战阅读页面，支持进度、提交答案和下一题。
   - 挑战题句子中仍可选中文本继续查词。
+- `v0.6`
+  - 基于文章句子和词典条目生成阅读后测验题，并缓存到数据库。
+  - 支持四选一测验、答题记录保存、答案解析展示。
+  - 挑战阅读题和阅读后测验题按 `question_type` 分开缓存，互不覆盖。
+  - 前端新增阅读后测验页面，支持进度、提交答案和下一题。
 
 后续每次功能或结构改动，都需要同步更新 `README.md` 的版本记录和当前说明。
 
@@ -117,6 +126,7 @@ psql -U postgres -d japanese_learning -f migrations/001_init.sql
 psql -U postgres -d japanese_learning -f migrations/002_articles_v02.sql
 psql -U postgres -d japanese_learning -f migrations/003_challenge_reading_v05.sql
 psql -U postgres -d japanese_learning -f migrations/004_challenge_metadata_v05_fix.sql
+psql -U postgres -d japanese_learning -f migrations/005_post_reading_quiz_v06.sql
 psql -U postgres -d japanese_learning -f seeds/001_seed.sql
 ```
 
@@ -126,6 +136,7 @@ psql -U postgres -d japanese_learning -f seeds/001_seed.sql
 psql -U postgres -d japanese_learning -f migrations/002_articles_v02.sql
 psql -U postgres -d japanese_learning -f migrations/003_challenge_reading_v05.sql
 psql -U postgres -d japanese_learning -f migrations/004_challenge_metadata_v05_fix.sql
+psql -U postgres -d japanese_learning -f migrations/005_post_reading_quiz_v06.sql
 ```
 
 ## 运行
@@ -160,6 +171,7 @@ http://localhost:8080
 - `v0.3` 的词典生成目前也是占位实现，用于先打通阅读查词和生词本流程。后续接入真实 AI 词条生成后，主要替换 `internal/service/dictionary_service.go`。
 - `v0.4` 的上下文例句目前来自查词时所在句子或就近半句，保存在生词本的 `source_sentence_text` 中，供后续复习和详情展示使用。
 - `v0.5` 的挑战题生成和干扰项目前仍是占位算法实现，用于先打通挑战阅读与题目缓存流程。后续接入真实 AI 后，主要替换 `internal/service/challenge_service.go`。
+- `v0.6` 的阅读后测验题目前复用占位题目生成逻辑，优先围绕文章句子中可匹配或可生成的词条出中文释义选择题。后续接入真实 AI 后，继续替换 `internal/service/challenge_service.go` 中的 post quiz 生成逻辑。
 
 ## v0.5 Review 记录
 
@@ -186,3 +198,15 @@ http://localhost:8080
 - 本地 PostgreSQL 已创建 `japanese_learning` 数据库并执行 `001` 到 `004` 迁移和 seed。
 - 当前种子数据包含 2 篇文章、3 条文章句子、2 条词典条目。
 - 本地服务可启动并通过 `http://localhost:8080` 访问。
+
+## v0.6 验证记录
+
+本轮实现阅读后测验模式，复用 `challenge_questions` 作为阅读题缓存表，并通过 `question_type` 区分挑战阅读和阅读后测验。
+
+已验证：
+
+- `go test ./...` 通过。
+- 本地 PostgreSQL 已执行 `migrations/005_post_reading_quiz_v06.sql`。
+- `GET /api/reading/articles/{id}/post-quiz` 可基于内置文章生成 `post_reading_quiz` 题目。
+- `POST /api/reading/questions/{id}/answer` 可提交阅读后测验答案并保存答题记录。
+- 本地 HTTP 烟测中，内置文章 `朝の散歩` 生成 2 道阅读后测验题，提交正确答案返回 `is_correct = true`。

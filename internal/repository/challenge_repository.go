@@ -20,14 +20,25 @@ func NewChallengeRepository(db *sql.DB) *ChallengeRepository {
 }
 
 func (r *ChallengeRepository) ListByArticle(ctx context.Context, articleID int64) ([]model.ChallengeQuestion, error) {
-	rows, err := r.db.QueryContext(ctx, `
+	return r.ListByArticleAndType(ctx, articleID, "")
+}
+
+func (r *ChallengeRepository) ListByArticleAndType(ctx context.Context, articleID int64, questionType string) ([]model.ChallengeQuestion, error) {
+	query := `
 		SELECT id, article_id, sentence_id, question_type, question_order, sentence_text, masked_sentence,
 		       correct_entry_id, correct_answer_text, option_a, option_b, option_c, option_d,
 		       correct_option, explanation, jlpt_level, ai_model, prompt_version, created_at
 		FROM challenge_questions
 		WHERE article_id = $1
-		ORDER BY question_order ASC
-	`, articleID)
+	`
+	args := []any{articleID}
+	if questionType != "" {
+		query += ` AND question_type = $2`
+		args = append(args, questionType)
+	}
+	query += ` ORDER BY question_order ASC`
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list challenge questions by article: %w", err)
 	}
@@ -85,13 +96,23 @@ func (r *ChallengeRepository) GetAccessibleByID(ctx context.Context, userID, que
 }
 
 func (r *ChallengeRepository) ReplaceByArticle(ctx context.Context, articleID int64, questions []model.ChallengeQuestion) error {
+	return r.ReplaceByArticleAndType(ctx, articleID, "", questions)
+}
+
+func (r *ChallengeRepository) ReplaceByArticleAndType(ctx context.Context, articleID int64, questionType string, questions []model.ChallengeQuestion) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin challenge question tx: %w", err)
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.ExecContext(ctx, `DELETE FROM challenge_questions WHERE article_id = $1`, articleID); err != nil {
+	deleteQuery := `DELETE FROM challenge_questions WHERE article_id = $1`
+	deleteArgs := []any{articleID}
+	if questionType != "" {
+		deleteQuery += ` AND question_type = $2`
+		deleteArgs = append(deleteArgs, questionType)
+	}
+	if _, err := tx.ExecContext(ctx, deleteQuery, deleteArgs...); err != nil {
 		return fmt.Errorf("delete challenge questions: %w", err)
 	}
 
@@ -103,7 +124,7 @@ func (r *ChallengeRepository) ReplaceByArticle(ctx context.Context, articleID in
 				correct_entry_id, correct_answer_text, option_a, option_b, option_c, option_d,
 				correct_option, explanation, jlpt_level, ai_model, prompt_version
 			)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 			RETURNING id, created_at
 		`,
 			q.ArticleID,

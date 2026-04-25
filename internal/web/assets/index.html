@@ -3,14 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ai-japanese-learning v0.5</title>
+    <title>ai-japanese-learning v0.6</title>
     <link rel="stylesheet" href="/assets/styles.css" />
   </head>
   <body>
     <div class="shell">
       <aside class="sidebar">
         <h1>AI 日语学习</h1>
-        <p class="muted">ai-japanese-learning · v0.5</p>
+        <p class="muted">ai-japanese-learning · v0.6</p>
         <nav>
           <button data-view="login">登录</button>
           <button data-view="register">注册</button>
@@ -20,6 +20,7 @@
           <button data-view="detail">文章详情</button>
           <button data-view="reading">阅读模式</button>
           <button data-view="challenge">挑战阅读</button>
+          <button data-view="post-quiz">阅读后测验</button>
           <button data-view="vocabulary">生词本</button>
           <button data-view="profile">个人中心</button>
         </nav>
@@ -101,6 +102,7 @@
           <div class="detail-actions">
             <button id="open-reading-button" class="secondary">进入阅读</button>
             <button id="open-challenge-button" class="secondary">进入挑战阅读</button>
+            <button id="open-post-quiz-button" class="secondary">阅读后测验</button>
             <button id="reprocess-button">重新处理文章</button>
           </div>
           <h3>句子拆分</h3>
@@ -125,6 +127,22 @@
             <div class="detail-actions">
               <button id="submit-challenge-answer-button">提交答案</button>
               <button id="next-challenge-question-button" class="secondary">下一题</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel view" id="view-post-quiz">
+          <h2>阅读后测验</h2>
+          <div id="post-quiz-header" class="summary">请选择一篇文章开始测验。</div>
+          <div id="post-quiz-card" class="challenge-card hidden">
+            <div id="post-quiz-progress" class="muted">第 0 / 0 题</div>
+            <p id="post-quiz-question" class="reading-sentence challenge-sentence">题目加载中。</p>
+            <p id="post-quiz-source" class="muted"></p>
+            <div id="post-quiz-options" class="challenge-options"></div>
+            <div id="post-quiz-feedback" class="summary hidden"></div>
+            <div class="detail-actions">
+              <button id="submit-post-quiz-answer-button">提交答案</button>
+              <button id="next-post-quiz-question-button" class="secondary">下一题</button>
             </div>
           </div>
         </section>
