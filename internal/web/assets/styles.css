@@ -257,6 +257,16 @@ textarea {
   gap: 4px;
 }
 
+.record-item {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid #e3e7df;
+  border-radius: 8px;
+  background: #fbfcfa;
+}
+
 .tag {
   display: inline-block;
   padding: 2px 8px;

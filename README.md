@@ -1,6 +1,6 @@
-# ai-japanese-learning v0.9
+# ai-japanese-learning v1.0
 
-当前版本已经从 `v0.8-review` 推进到 `v0.9`，完成 MVP 整体联调发布版本的基础收尾。
+当前版本已经从 `v0.9` 推进到 `v1.0`，补齐计划 review 后确认的正式化缺口。
 
 已完成：
 
@@ -46,6 +46,8 @@
 - 阅读后测验答题结果查询接口 `GET /api/reading/articles/{id}/post-quiz/results`
 - 词汇复习记录查询接口 `GET /api/review/records`
 - 健康检查接口 `GET /api/health`
+- 显式词典生成接口 `POST /api/dictionary/generate`
+- 学习记录页面：阅读后测验记录与词汇复习记录
 - 前端基础加载状态、错误提示、空状态和查词防重复请求
 - Dockerfile、docker-compose 和 `.env.example` 基础部署配置
 - MVP 测试数据 `seeds/002_mvp_seed_v09.sql`
@@ -97,6 +99,10 @@
   - 新增健康检查接口，便于部署探活。
   - 新增 Docker / Compose / env 示例配置。
   - 新增 MVP 测试文章和词典 seed。
+- `v1.0`
+  - 补齐计划 API 草案中的 `POST /api/dictionary/generate`。
+  - 前端新增学习记录页面，展示当前文章阅读后测验记录和最近词汇复习记录。
+  - 将真实 AI 服务商、通用 JSON Schema、自动重试队列、文章标签、独立 onboarding 页面列为后续增强项。
 
 后续每次功能或结构改动，都需要同步更新 `README.md` 的版本记录和当前说明。
 
@@ -242,6 +248,7 @@ docker compose up --build
 - `v0.7` 的词汇复习题目前复用占位干扰项生成逻辑，正确答案来自词典 `primary_meaning_zh`。后续接入真实 AI 后，主要替换 `internal/service/review_service.go` 中的复习题生成逻辑。
 - `v0.8-review` 已把当前所有占位 AI 生成路径接入统一 AI 缓存和日志，包括翻译、词典、挑战阅读题、阅读后测验题和词汇复习题。后续接入真实 AI 时可以沿用 `internal/service/ai_service.go` 和 `ai_cache` / `ai_logs` 表。
 - `v0.9` 仍是单体 MVP 形态，部署配置只负责启动应用和 PostgreSQL；迁移执行仍保留为显式步骤，避免应用启动时自动改库。
+- `v1.0` 仍沿用当前占位 AI 生成器；真实 AI 服务商、通用 JSON Schema 校验和自动重试队列尚未接入。
 
 ## v0.5 Review 记录
 
@@ -328,3 +335,14 @@ docker compose up --build
 - 前端全局 loading、请求超时提示、空列表状态和查词防重复请求已接入。
 - Dockerfile、docker-compose、`.env.example` 已加入基础部署配置。
 - `seeds/002_mvp_seed_v09.sql` 已加入 1 篇 MVP 内置文章和 2 条词典测试数据。
+
+## v1.0 验证记录
+
+本轮将计划 review 后确认的缺口整理进 `计划.md` 的 `Version 1.0`，并先落实可直接闭合的正式化功能。
+
+已验证：
+
+- `go test ./...` 通过。
+- `node --check internal/web/assets/app.js` 通过。
+- `POST /api/dictionary/generate` 可复用词典查询生成逻辑返回词条。
+- 学习记录页可加载 `GET /api/reading/articles/{id}/post-quiz/results` 和 `GET /api/review/records`。

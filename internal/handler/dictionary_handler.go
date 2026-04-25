@@ -1,14 +1,38 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
 )
 
+type dictionaryGenerateRequest struct {
+	Text string `json:"text"`
+}
+
 func (r *Router) handleDictionaryLookup(w http.ResponseWriter, req *http.Request) {
 	text := req.URL.Query().Get("text")
 	entry, generated, err := r.dictionaryService.LookupOrGenerate(req.Context(), text)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"entry":     entry,
+		"generated": generated,
+	})
+}
+
+func (r *Router) handleDictionaryGenerate(w http.ResponseWriter, req *http.Request) {
+	var input dictionaryGenerateRequest
+	if err := json.NewDecoder(req.Body).Decode(&input); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	entry, generated, err := r.dictionaryService.LookupOrGenerate(req.Context(), input.Text)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return

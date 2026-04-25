@@ -69,6 +69,8 @@ const reviewQuestion = document.getElementById("review-question");
 const reviewContext = document.getElementById("review-context");
 const reviewOptions = document.getElementById("review-options");
 const reviewFeedback = document.getElementById("review-feedback");
+const postQuizResultsList = document.getElementById("post-quiz-results-list");
+const reviewRecordsList = document.getElementById("review-records-list");
 const vocabularyList = document.getElementById("vocabulary-list");
 const vocabularyDetail = document.getElementById("vocabulary-detail");
 const vocabularyFilterForm = document.getElementById("vocabulary-filter-form");
@@ -89,6 +91,8 @@ const submitPostQuizAnswerButton = document.getElementById("submit-post-quiz-ans
 const nextPostQuizQuestionButton = document.getElementById("next-post-quiz-question-button");
 const submitReviewAnswerButton = document.getElementById("submit-review-answer-button");
 const nextReviewQuestionButton = document.getElementById("next-review-question-button");
+const loadPostQuizResultsButton = document.getElementById("load-post-quiz-results-button");
+const loadReviewRecordsButton = document.getElementById("load-review-records-button");
 const reprocessButton = document.getElementById("reprocess-button");
 
 document.querySelectorAll("[data-view]").forEach((button) => {
@@ -104,6 +108,9 @@ document.querySelectorAll("[data-view]").forEach((button) => {
     }
     if (view === "review" && state.user) {
       await loadReviewDue();
+    }
+    if (view === "records" && state.user) {
+      await loadLearningRecords();
     }
     showView(view);
   });
@@ -466,6 +473,14 @@ nextReviewQuestionButton.addEventListener("click", () => {
   renderReviewQuestion();
 });
 
+loadPostQuizResultsButton.addEventListener("click", async () => {
+  await loadPostQuizResults();
+});
+
+loadReviewRecordsButton.addEventListener("click", async () => {
+  await loadReviewRecords();
+});
+
 readingContent.addEventListener("mouseup", () => {
   scheduleLookupFromSelection();
 });
@@ -522,6 +537,8 @@ function renderUser() {
     postQuizCard.classList.add("hidden");
     reviewHeader.textContent = "加载今日待复习生词。";
     reviewCard.classList.add("hidden");
+    postQuizResultsList.innerHTML = "";
+    reviewRecordsList.innerHTML = "";
     vocabularyList.innerHTML = "";
     vocabularyDetail.textContent = "请选择一个生词查看详情。";
     openVocabularyArticleButton.disabled = true;
@@ -555,6 +572,80 @@ function handleAuthResult(result, successMessage) {
   renderUser();
   Promise.all([loadLibrary(), loadArticles(), loadVocabularyList()]);
   setMessage(successMessage);
+}
+
+async function loadLearningRecords() {
+  postQuizResultsList.innerHTML = `<li class="empty-state">选择文章后可查看阅读后测验记录。</li>`;
+  await loadReviewRecords();
+  if (state.selectedArticleId) {
+    await loadPostQuizResults();
+  }
+}
+
+async function loadPostQuizResults() {
+  if (!state.selectedArticleId) {
+    postQuizResultsList.innerHTML = `<li class="empty-state">请先在文章详情中选择一篇文章。</li>`;
+    return;
+  }
+
+  postQuizResultsList.innerHTML = `<li class="empty-state">正在加载阅读后测验记录...</li>`;
+  const result = await request(`/api/reading/articles/${state.selectedArticleId}/post-quiz/results`);
+  if (!result.ok) {
+    return;
+  }
+
+  const items = result.data.items || [];
+  if (items.length === 0) {
+    postQuizResultsList.innerHTML = `<li class="empty-state">当前文章还没有阅读后测验答题记录。</li>`;
+    return;
+  }
+
+  postQuizResultsList.innerHTML = items
+    .map((item) => {
+      const question = item.question;
+      const attempt = item.attempt;
+      return `
+        <li>
+          <div class="record-item">
+            <strong>${attempt.is_correct ? "正确" : "错误"} · ${escapeHTML(question.correct_answer_text)}</strong>
+            <span class="meta">选择：${escapeHTML(attempt.selected_option)} / 正确：${escapeHTML(question.correct_option)} / ${formatDateTime(attempt.answered_at)}</span>
+            <span class="meta">${escapeHTML(question.masked_sentence)}</span>
+          </div>
+        </li>
+      `;
+    })
+    .join("");
+}
+
+async function loadReviewRecords() {
+  reviewRecordsList.innerHTML = `<li class="empty-state">正在加载词汇复习记录...</li>`;
+  const result = await request("/api/review/records?limit=20");
+  if (!result.ok) {
+    return;
+  }
+
+  const items = result.data.items || [];
+  if (items.length === 0) {
+    reviewRecordsList.innerHTML = `<li class="empty-state">还没有词汇复习记录。</li>`;
+    return;
+  }
+
+  reviewRecordsList.innerHTML = items
+    .map((item) => {
+      const record = item.record;
+      const entry = item.dictionary_entry;
+      const question = item.question;
+      return `
+        <li>
+          <div class="record-item">
+            <strong>${escapeHTML(entry.surface)} · ${record.is_correct ? "正确" : "错误"}</strong>
+            <span class="meta">选择：${escapeHTML(record.selected_option)} / 正确：${escapeHTML(question.correct_option)} / ${formatDateTime(record.reviewed_at)}</span>
+            <span class="meta">${escapeHTML(entry.primary_meaning_zh)} · ${escapeHTML(item.context_sentence || "-")}</span>
+          </div>
+        </li>
+      `;
+    })
+    .join("");
 }
 
 async function loadLibrary() {

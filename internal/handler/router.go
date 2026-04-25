@@ -76,6 +76,7 @@ func NewRouter(
 	r.mux.HandleFunc("GET /api/reading/articles/{id}/post-quiz/results", r.withAuth(r.handlePostQuizResults))
 	r.mux.HandleFunc("POST /api/reading/questions/{id}/answer", r.withAuth(r.handleSubmitChallengeAnswer))
 	r.mux.HandleFunc("GET /api/dictionary/lookup", r.withAuth(r.handleDictionaryLookup))
+	r.mux.HandleFunc("POST /api/dictionary/generate", r.withAuth(r.handleDictionaryGenerate))
 	r.mux.HandleFunc("GET /api/dictionary/{id}", r.withAuth(r.handleDictionaryDetail))
 	r.mux.HandleFunc("GET /api/vocabulary", r.withAuth(r.handleListVocabulary))
 	r.mux.HandleFunc("POST /api/vocabulary", r.withAuth(r.handleCreateVocabulary))
@@ -95,7 +96,7 @@ func NewRouter(
 func (r *Router) handleHealth(w http.ResponseWriter, req *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{
 		"status":  "ok",
-		"version": "v0.9",
+		"version": "v1.0",
 	})
 }
 

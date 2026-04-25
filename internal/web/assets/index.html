@@ -3,14 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ai-japanese-learning v0.9</title>
+    <title>ai-japanese-learning v1.0</title>
     <link rel="stylesheet" href="/assets/styles.css" />
   </head>
   <body>
     <div class="shell">
       <aside class="sidebar">
         <h1>AI 日语学习</h1>
-        <p class="muted">ai-japanese-learning · v0.9</p>
+        <p class="muted">ai-japanese-learning · v1.0</p>
         <nav>
           <button data-view="login">登录</button>
           <button data-view="register">注册</button>
@@ -23,6 +23,7 @@
           <button data-view="post-quiz">阅读后测验</button>
           <button data-view="vocabulary">生词本</button>
           <button data-view="review">词汇复习</button>
+          <button data-view="records">学习记录</button>
           <button data-view="profile">个人中心</button>
         </nav>
       </aside>
@@ -196,6 +197,24 @@
             <div class="detail-actions">
               <button id="submit-review-answer-button">提交答案</button>
               <button id="next-review-question-button" class="secondary">下一题</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel view" id="view-records">
+          <h2>学习记录</h2>
+          <div class="detail-actions">
+            <button id="load-post-quiz-results-button" class="secondary">查看当前文章测验记录</button>
+            <button id="load-review-records-button" class="secondary">查看词汇复习记录</button>
+          </div>
+          <div class="vocabulary-layout">
+            <div class="vocabulary-column">
+              <h3>阅读后测验记录</h3>
+              <ul id="post-quiz-results-list" class="list"></ul>
+            </div>
+            <div class="vocabulary-column">
+              <h3>词汇复习记录</h3>
+              <ul id="review-records-list" class="list"></ul>
             </div>
           </div>
         </section>
