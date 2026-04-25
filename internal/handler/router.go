@@ -64,8 +64,13 @@ func NewRouter(
 	r.mux.HandleFunc("GET /api/reading/articles/{id}", r.withAuth(r.handleReadingArticle))
 	r.mux.HandleFunc("GET /api/dictionary/lookup", r.withAuth(r.handleDictionaryLookup))
 	r.mux.HandleFunc("GET /api/dictionary/{id}", r.withAuth(r.handleDictionaryDetail))
+	r.mux.HandleFunc("GET /api/vocabulary", r.withAuth(r.handleListVocabulary))
 	r.mux.HandleFunc("POST /api/vocabulary", r.withAuth(r.handleCreateVocabulary))
 	r.mux.HandleFunc("GET /api/vocabulary/check", r.withAuth(r.handleVocabularyCheck))
+	r.mux.HandleFunc("GET /api/vocabulary/{id}", r.withAuth(r.handleVocabularyDetail))
+	r.mux.HandleFunc("GET /api/vocabulary/{id}/context", r.withAuth(r.handleVocabularyContext))
+	r.mux.HandleFunc("PUT /api/vocabulary/{id}/status", r.withAuth(r.handleUpdateVocabularyStatus))
+	r.mux.HandleFunc("DELETE /api/vocabulary/{id}", r.withAuth(r.handleDeleteVocabulary))
 
 	return r
 }

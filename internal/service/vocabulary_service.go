@@ -16,6 +16,22 @@ type VocabularyService struct {
 	articleRepo    *repository.ArticleRepository
 }
 
+func isValidVocabularyStatus(status model.VocabularyStatus) bool {
+	switch status {
+	case model.VocabularyNew, model.VocabularyLearning, model.VocabularyReviewing, model.VocabularyMastered, model.VocabularyIgnored:
+		return true
+	default:
+		return false
+	}
+}
+
+func sameOptionalInt64(left, right *int64) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
+}
+
 func NewVocabularyService(
 	vocabularyRepo *repository.VocabularyRepository,
 	dictionaryRepo *repository.DictionaryRepository,
@@ -37,6 +53,17 @@ func (s *VocabularyService) Check(ctx context.Context, userID, dictionaryEntryID
 		return nil, false, nil
 	}
 	return nil, false, err
+}
+
+func (s *VocabularyService) List(ctx context.Context, userID int64, status string) ([]model.VocabularyDetail, error) {
+	if status != "" && !isValidVocabularyStatus(model.VocabularyStatus(status)) {
+		return nil, fmt.Errorf("invalid vocabulary status")
+	}
+	return s.vocabularyRepo.ListByUser(ctx, userID, status)
+}
+
+func (s *VocabularyService) GetDetail(ctx context.Context, userID, vocabularyID int64) (*model.VocabularyDetail, error) {
+	return s.vocabularyRepo.GetDetail(ctx, userID, vocabularyID)
 }
 
 func (s *VocabularyService) Add(
@@ -65,6 +92,16 @@ func (s *VocabularyService) Add(
 
 	existing, err := s.vocabularyRepo.GetByUserAndDictionaryEntry(ctx, userID, dictionaryEntryID)
 	if err == nil {
+		if existing.SourceSentenceText != sourceSentenceText ||
+			existing.SelectedText != selectedText ||
+			!sameOptionalInt64(existing.SourceSentenceID, sourceSentenceID) ||
+			!sameOptionalInt64(existing.ArticleID, articleID) {
+			if err := s.vocabularyRepo.UpdateContext(ctx, userID, dictionaryEntryID, articleID, sourceSentenceID, selectedText, sourceSentenceText); err != nil {
+				return nil, false, err
+			}
+			updated, err := s.vocabularyRepo.GetByUserAndDictionaryEntry(ctx, userID, dictionaryEntryID)
+			return updated, false, err
+		}
 		return existing, false, nil
 	}
 	if err != repository.ErrVocabularyNotFound {
@@ -91,4 +128,18 @@ func (s *VocabularyService) Add(
 		return nil, false, err
 	}
 	return created, true, nil
+}
+
+func (s *VocabularyService) UpdateStatus(ctx context.Context, userID, vocabularyID int64, status model.VocabularyStatus) (*model.VocabularyDetail, error) {
+	if !isValidVocabularyStatus(status) {
+		return nil, fmt.Errorf("invalid vocabulary status")
+	}
+	if err := s.vocabularyRepo.UpdateStatus(ctx, userID, vocabularyID, status); err != nil {
+		return nil, err
+	}
+	return s.vocabularyRepo.GetDetail(ctx, userID, vocabularyID)
+}
+
+func (s *VocabularyService) Delete(ctx context.Context, userID, vocabularyID int64) error {
+	return s.vocabularyRepo.Delete(ctx, userID, vocabularyID)
 }

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"ai-japanese-learning/internal/model"
 )
@@ -67,6 +68,137 @@ func (r *VocabularyRepository) Create(ctx context.Context, item *model.UserVocab
 	return item, nil
 }
 
+func (r *VocabularyRepository) ListByUser(ctx context.Context, userID int64, status string) ([]model.VocabularyDetail, error) {
+	query := `
+		SELECT uv.id, uv.user_id, uv.dictionary_entry_id, uv.article_id, uv.source_sentence_id, uv.selected_text, uv.source_sentence_text,
+		       uv.status, uv.familiarity, uv.correct_count, uv.wrong_count, uv.consecutive_correct_count, uv.added_at,
+		       uv.last_reviewed_at, uv.next_review_at, uv.created_at, uv.updated_at,
+		       de.id, de.surface, de.lemma, de.reading, de.romaji, de.part_of_speech, de.meaning_zh, de.meaning_ja, de.meaning_en,
+		       de.primary_meaning_zh, de.jlpt_level, de.example_sentence, de.example_translation_zh, de.conjugation_type,
+		       de.is_common, de.source, de.verified, de.confidence_score::text, de.ai_model, de.prompt_version, de.created_at, de.updated_at,
+		       a.title
+		FROM user_vocabulary uv
+		JOIN dictionary_entries de ON de.id = uv.dictionary_entry_id
+		LEFT JOIN articles a ON a.id = uv.article_id
+		WHERE uv.user_id = $1
+	`
+	args := []any{userID}
+	if strings.TrimSpace(status) != "" {
+		query += ` AND uv.status = $2`
+		args = append(args, status)
+	}
+	query += ` ORDER BY uv.added_at DESC`
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list vocabulary by user: %w", err)
+	}
+	defer rows.Close()
+
+	var items []model.VocabularyDetail
+	for rows.Next() {
+		item, err := scanVocabularyDetail(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, *item)
+	}
+	return items, rows.Err()
+}
+
+func (r *VocabularyRepository) GetDetail(ctx context.Context, userID, vocabularyID int64) (*model.VocabularyDetail, error) {
+	row := r.db.QueryRowContext(ctx, `
+		SELECT uv.id, uv.user_id, uv.dictionary_entry_id, uv.article_id, uv.source_sentence_id, uv.selected_text, uv.source_sentence_text,
+		       uv.status, uv.familiarity, uv.correct_count, uv.wrong_count, uv.consecutive_correct_count, uv.added_at,
+		       uv.last_reviewed_at, uv.next_review_at, uv.created_at, uv.updated_at,
+		       de.id, de.surface, de.lemma, de.reading, de.romaji, de.part_of_speech, de.meaning_zh, de.meaning_ja, de.meaning_en,
+		       de.primary_meaning_zh, de.jlpt_level, de.example_sentence, de.example_translation_zh, de.conjugation_type,
+		       de.is_common, de.source, de.verified, de.confidence_score::text, de.ai_model, de.prompt_version, de.created_at, de.updated_at,
+		       a.title
+		FROM user_vocabulary uv
+		JOIN dictionary_entries de ON de.id = uv.dictionary_entry_id
+		LEFT JOIN articles a ON a.id = uv.article_id
+		WHERE uv.user_id = $1 AND uv.id = $2
+	`, userID, vocabularyID)
+
+	item, err := scanVocabularyDetail(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrVocabularyNotFound
+		}
+		return nil, fmt.Errorf("get vocabulary detail: %w", err)
+	}
+	return item, nil
+}
+
+func (r *VocabularyRepository) UpdateStatus(ctx context.Context, userID, vocabularyID int64, status model.VocabularyStatus) error {
+	result, err := r.db.ExecContext(ctx, `
+		UPDATE user_vocabulary
+		SET status = $3,
+		    updated_at = NOW()
+		WHERE user_id = $1 AND id = $2
+	`, userID, vocabularyID, status)
+	if err != nil {
+		return fmt.Errorf("update vocabulary status: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected for update vocabulary status: %w", err)
+	}
+	if rows == 0 {
+		return ErrVocabularyNotFound
+	}
+	return nil
+}
+
+func (r *VocabularyRepository) UpdateContext(
+	ctx context.Context,
+	userID, dictionaryEntryID int64,
+	articleID *int64,
+	sourceSentenceID *int64,
+	selectedText string,
+	sourceSentenceText string,
+) error {
+	result, err := r.db.ExecContext(ctx, `
+		UPDATE user_vocabulary
+		SET article_id = $3,
+		    source_sentence_id = $4,
+		    selected_text = $5,
+		    source_sentence_text = $6,
+		    updated_at = NOW()
+		WHERE user_id = $1 AND dictionary_entry_id = $2
+	`, userID, dictionaryEntryID, articleID, sourceSentenceID, selectedText, sourceSentenceText)
+	if err != nil {
+		return fmt.Errorf("update vocabulary context: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected for update vocabulary context: %w", err)
+	}
+	if rows == 0 {
+		return ErrVocabularyNotFound
+	}
+	return nil
+}
+
+func (r *VocabularyRepository) Delete(ctx context.Context, userID, vocabularyID int64) error {
+	result, err := r.db.ExecContext(ctx, `
+		DELETE FROM user_vocabulary
+		WHERE user_id = $1 AND id = $2
+	`, userID, vocabularyID)
+	if err != nil {
+		return fmt.Errorf("delete vocabulary: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected for delete vocabulary: %w", err)
+	}
+	if rows == 0 {
+		return ErrVocabularyNotFound
+	}
+	return nil
+}
+
 type userVocabularyScanner interface {
 	Scan(dest ...any) error
 }
@@ -95,4 +227,62 @@ func scanUserVocabulary(scanner userVocabularyScanner) (*model.UserVocabulary, e
 		return nil, err
 	}
 	return &item, nil
+}
+
+func scanVocabularyDetail(scanner userVocabularyScanner) (*model.VocabularyDetail, error) {
+	var (
+		item         model.UserVocabulary
+		entry        model.DictionaryEntry
+		articleTitle *string
+	)
+	if err := scanner.Scan(
+		&item.ID,
+		&item.UserID,
+		&item.DictionaryEntryID,
+		&item.ArticleID,
+		&item.SourceSentenceID,
+		&item.SelectedText,
+		&item.SourceSentenceText,
+		&item.Status,
+		&item.Familiarity,
+		&item.CorrectCount,
+		&item.WrongCount,
+		&item.ConsecutiveCorrectCount,
+		&item.AddedAt,
+		&item.LastReviewedAt,
+		&item.NextReviewAt,
+		&item.CreatedAt,
+		&item.UpdatedAt,
+		&entry.ID,
+		&entry.Surface,
+		&entry.Lemma,
+		&entry.Reading,
+		&entry.Romaji,
+		&entry.PartOfSpeech,
+		&entry.MeaningZH,
+		&entry.MeaningJA,
+		&entry.MeaningEN,
+		&entry.PrimaryMeaningZH,
+		&entry.JLPTLevel,
+		&entry.ExampleSentence,
+		&entry.ExampleTranslationZH,
+		&entry.ConjugationType,
+		&entry.IsCommon,
+		&entry.Source,
+		&entry.Verified,
+		&entry.ConfidenceScore,
+		&entry.AIModel,
+		&entry.PromptVersion,
+		&entry.CreatedAt,
+		&entry.UpdatedAt,
+		&articleTitle,
+	); err != nil {
+		return nil, err
+	}
+	return &model.VocabularyDetail{
+		Item:            item,
+		DictionaryEntry: entry,
+		ArticleTitle:    articleTitle,
+		ExampleSentence: item.SourceSentenceText,
+	}, nil
 }

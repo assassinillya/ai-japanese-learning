@@ -131,3 +131,10 @@ type UserVocabulary struct {
 	CreatedAt               time.Time        `json:"created_at"`
 	UpdatedAt               time.Time        `json:"updated_at"`
 }
+
+type VocabularyDetail struct {
+	Item            UserVocabulary  `json:"item"`
+	DictionaryEntry DictionaryEntry `json:"dictionary_entry"`
+	ArticleTitle    *string         `json:"article_title,omitempty"`
+	ExampleSentence string          `json:"example_sentence"`
+}

@@ -2,13 +2,17 @@ const state = {
   token: localStorage.getItem("access_token") || "",
   user: null,
   selectedArticleId: null,
+  selectedVocabularyId: null,
   readingArticle: null,
+  vocabularyFilter: "",
   lookup: {
     timer: null,
     currentText: "",
     currentSentenceId: null,
     currentSentenceText: "",
+    currentContextSnippet: "",
     currentEntry: null,
+    currentGenerated: false,
     lastLookupKey: "",
   },
 };
@@ -24,6 +28,12 @@ const articleDetail = document.getElementById("article-detail");
 const sentenceList = document.getElementById("sentence-list");
 const readingHeader = document.getElementById("reading-header");
 const readingContent = document.getElementById("reading-content");
+const vocabularyList = document.getElementById("vocabulary-list");
+const vocabularyDetail = document.getElementById("vocabulary-detail");
+const vocabularyFilterForm = document.getElementById("vocabulary-filter-form");
+const vocabularyStatusButtons = document.querySelectorAll("[data-vocabulary-status]");
+const deleteVocabularyButton = document.getElementById("delete-vocabulary-button");
+const openVocabularyArticleButton = document.getElementById("open-vocabulary-article-button");
 const popup = document.getElementById("lookup-popup");
 const popupCard = popup.querySelector(".lookup-popup-card");
 const popupTitle = document.getElementById("lookup-popup-title");
@@ -33,7 +43,13 @@ const openReadingButton = document.getElementById("open-reading-button");
 const reprocessButton = document.getElementById("reprocess-button");
 
 document.querySelectorAll("[data-view]").forEach((button) => {
-  button.addEventListener("click", () => showView(button.dataset.view));
+  button.addEventListener("click", async () => {
+    const view = button.dataset.view;
+    if (view === "vocabulary" && state.user) {
+      await loadVocabularyList();
+    }
+    showView(view);
+  });
 });
 
 document.getElementById("register-form").addEventListener("submit", async (event) => {
@@ -66,6 +82,7 @@ document.getElementById("logout-button").addEventListener("click", async () => {
   state.token = "";
   state.user = null;
   state.selectedArticleId = null;
+  state.selectedVocabularyId = null;
   state.readingArticle = null;
   hideLookupPopup();
   renderUser();
@@ -136,7 +153,7 @@ addVocabularyButton.addEventListener("click", async () => {
     article_id: state.selectedArticleId,
     source_sentence_id: state.lookup.currentSentenceId,
     selected_text: state.lookup.currentText,
-    source_sentence_text: state.lookup.currentSentenceText,
+    source_sentence_text: state.lookup.currentContextSnippet || state.lookup.currentSentenceText,
   };
   const result = await request("/api/vocabulary", {
     method: "POST",
@@ -147,7 +164,70 @@ addVocabularyButton.addEventListener("click", async () => {
   }
   addVocabularyButton.disabled = true;
   addVocabularyButton.textContent = "已加入生词本";
-  setMessage(result.data.created ? "已加入生词本" : "该词已在生词本中");
+  if (state.selectedVocabularyId) {
+    await loadVocabularyList();
+  }
+  setMessage(result.data.created ? "已加入生词本，当前查询上下文已作为例句保存" : "该词已在生词本中");
+});
+
+vocabularyFilterForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  state.vocabularyFilter = new FormData(event.currentTarget).get("status") || "";
+  await loadVocabularyList();
+});
+
+vocabularyStatusButtons.forEach((button) => {
+  button.addEventListener("click", async () => {
+    if (!state.selectedVocabularyId) {
+      setMessage("请先选择一个生词");
+      return;
+    }
+    const result = await request(`/api/vocabulary/${state.selectedVocabularyId}/status`, {
+      method: "PUT",
+      body: JSON.stringify({ status: button.dataset.vocabularyStatus }),
+    });
+    if (!result.ok) {
+      return;
+    }
+    await Promise.all([loadVocabularyList(), loadVocabularyDetail(state.selectedVocabularyId)]);
+    setMessage(`生词状态已更新为 ${button.dataset.vocabularyStatus}`);
+  });
+});
+
+deleteVocabularyButton.addEventListener("click", async () => {
+  if (!state.selectedVocabularyId) {
+    setMessage("请先选择一个生词");
+    return;
+  }
+  const vocabularyId = state.selectedVocabularyId;
+  const result = await request(`/api/vocabulary/${vocabularyId}`, {
+    method: "DELETE",
+  });
+  if (!result.ok) {
+    return;
+  }
+  state.selectedVocabularyId = null;
+  await loadVocabularyList();
+  vocabularyDetail.textContent = "请选择一个生词查看详情。";
+  openVocabularyArticleButton.disabled = true;
+  setMessage("生词已删除");
+});
+
+openVocabularyArticleButton.addEventListener("click", async () => {
+  if (!state.selectedVocabularyId) {
+    setMessage("请先选择一个生词");
+    return;
+  }
+  const result = await request(`/api/vocabulary/${state.selectedVocabularyId}/context`);
+  if (!result.ok) {
+    return;
+  }
+  if (!result.data.article_id) {
+    setMessage("这个生词没有关联来源文章");
+    return;
+  }
+  await loadArticleDetail(result.data.article_id);
+  showView("detail");
 });
 
 readingContent.addEventListener("mouseup", () => {
@@ -172,7 +252,7 @@ async function bootstrap() {
     const me = await request("/api/auth/me");
     if (me.ok) {
       state.user = me.data;
-      await Promise.all([loadLibrary(), loadArticles()]);
+      await Promise.all([loadLibrary(), loadArticles(), loadVocabularyList()]);
     } else {
       localStorage.removeItem("access_token");
       state.token = "";
@@ -196,6 +276,9 @@ function renderUser() {
     sentenceList.innerHTML = "";
     readingHeader.textContent = "请选择一篇文章进入阅读。";
     readingContent.innerHTML = "";
+    vocabularyList.innerHTML = "";
+    vocabularyDetail.textContent = "请选择一个生词查看详情。";
+    openVocabularyArticleButton.disabled = true;
     showView("login");
     return;
   }
@@ -209,6 +292,10 @@ function renderUser() {
     `首次引导完成：${state.user.onboarding_completed ? "是" : "否"}`,
   ].join("\n");
   document.querySelector('#jlpt-form select[name="jlpt_level"]').value = state.user.jlpt_level;
+  vocabularyFilterForm.elements.status.value = state.vocabularyFilter;
+  if (!state.selectedVocabularyId) {
+    openVocabularyArticleButton.disabled = true;
+  }
   showView("home");
 }
 
@@ -220,7 +307,7 @@ function handleAuthResult(result, successMessage) {
   state.user = result.data.user;
   localStorage.setItem("access_token", state.token);
   renderUser();
-  Promise.all([loadLibrary(), loadArticles()]);
+  Promise.all([loadLibrary(), loadArticles(), loadVocabularyList()]);
   setMessage(successMessage);
 }
 
@@ -316,7 +403,7 @@ async function loadReadingArticle(articleId) {
     `标题：${article.title}`,
     `JLPT：${article.jlpt_level}`,
     `处理状态：${article.translation_status}`,
-    "提示：在下方正文中选中文本以查词。",
+    "提示：在下方正文中选中文本以查词。加入生词本时会把当前上下文句子或半句一起保存为例句。",
   ].join("\n");
 
   readingContent.innerHTML = (sentences || [])
@@ -328,6 +415,63 @@ async function loadReadingArticle(articleId) {
       `,
     )
     .join("");
+}
+
+async function loadVocabularyList() {
+  const suffix = state.vocabularyFilter ? `?status=${encodeURIComponent(state.vocabularyFilter)}` : "";
+  const result = await request(`/api/vocabulary${suffix}`);
+  if (!result.ok) {
+    return;
+  }
+
+  const items = result.data.items || [];
+  vocabularyList.innerHTML = items
+    .map(
+      (detail) => `
+        <li>
+          <button class="link-button vocabulary-item" data-vocabulary-id="${detail.item.id}">
+            <span><strong>${escapeHTML(detail.dictionary_entry.surface)}</strong> <span class="tag">${escapeHTML(detail.item.status)}</span></span>
+            <span class="meta">${escapeHTML(detail.dictionary_entry.primary_meaning_zh)} / ${escapeHTML(detail.dictionary_entry.jlpt_level)}</span>
+            <span class="meta">${escapeHTML(detail.example_sentence || detail.item.source_sentence_text || "-")}</span>
+          </button>
+        </li>
+      `,
+    )
+    .join("");
+
+  vocabularyList.querySelectorAll("[data-vocabulary-id]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const vocabularyId = Number(button.dataset.vocabularyId);
+      await loadVocabularyDetail(vocabularyId);
+    });
+  });
+}
+
+async function loadVocabularyDetail(vocabularyId) {
+  const result = await request(`/api/vocabulary/${vocabularyId}`);
+  if (!result.ok) {
+    return;
+  }
+
+  state.selectedVocabularyId = vocabularyId;
+  const detail = result.data;
+  vocabularyDetail.textContent = [
+    `词形：${detail.dictionary_entry.surface}`,
+    `原形：${detail.dictionary_entry.lemma}`,
+    `读音：${detail.dictionary_entry.reading || "-"}`,
+    `中文释义：${detail.dictionary_entry.meaning_zh}`,
+    `主要释义：${detail.dictionary_entry.primary_meaning_zh}`,
+    `当前状态：${detail.item.status}`,
+    `来源文章：${detail.article_title || "-"}`,
+    `查询原文：${detail.item.selected_text}`,
+    "",
+    "保存的例句：",
+    detail.example_sentence || detail.item.source_sentence_text || "-",
+    "",
+    "词典自带例句：",
+    detail.dictionary_entry.example_sentence || "-",
+  ].join("\n");
+  openVocabularyArticleButton.disabled = !detail.item.article_id;
 }
 
 function bindArticleSelection(container) {
@@ -377,12 +521,14 @@ function getSelectionState() {
     return null;
   }
 
+  const sentenceText = sentenceElement.dataset.sentenceText || sentenceElement.textContent.trim();
   const rect = range.getBoundingClientRect();
   return {
     text,
     rect,
     sentenceId: Number(sentenceElement.dataset.sentenceId),
-    sentenceText: sentenceElement.dataset.sentenceText || sentenceElement.textContent.trim(),
+    sentenceText,
+    contextSnippet: extractContextSnippet(sentenceText, text),
   };
 }
 
@@ -405,14 +551,15 @@ async function lookupSelection(selectionState) {
   addVocabularyButton.disabled = true;
   addVocabularyButton.textContent = "加入生词本";
 
-  const lookupKey = `${selectionState.text}:${selectionState.sentenceId}`;
+  const lookupKey = `${selectionState.text}:${selectionState.sentenceId}:${selectionState.contextSnippet}`;
   state.lookup.currentText = selectionState.text;
   state.lookup.currentSentenceId = selectionState.sentenceId;
   state.lookup.currentSentenceText = selectionState.sentenceText;
+  state.lookup.currentContextSnippet = selectionState.contextSnippet;
 
   if (state.lookup.lastLookupKey === lookupKey && state.lookup.currentEntry) {
     await refreshVocabularyButton(state.lookup.currentEntry.id);
-    popupBody.textContent = formatDictionaryEntry(state.lookup.currentEntry, false);
+    popupBody.textContent = formatDictionaryEntry(state.lookup.currentEntry, state.lookup.currentGenerated, state.lookup.currentContextSnippet);
     return;
   }
 
@@ -423,8 +570,9 @@ async function lookupSelection(selectionState) {
   }
 
   state.lookup.currentEntry = lookupResult.data.entry;
+  state.lookup.currentGenerated = lookupResult.data.generated;
   state.lookup.lastLookupKey = lookupKey;
-  popupBody.textContent = formatDictionaryEntry(lookupResult.data.entry, lookupResult.data.generated);
+  popupBody.textContent = formatDictionaryEntry(lookupResult.data.entry, lookupResult.data.generated, selectionState.contextSnippet);
   await refreshVocabularyButton(lookupResult.data.entry.id);
 }
 
@@ -457,7 +605,7 @@ function hideLookupPopup() {
   popup.classList.add("hidden");
 }
 
-function formatDictionaryEntry(entry, generated) {
+function formatDictionaryEntry(entry, generated, contextSnippet) {
   return [
     `词形：${entry.surface}`,
     `原形：${entry.lemma}`,
@@ -467,12 +615,51 @@ function formatDictionaryEntry(entry, generated) {
     `中文释义：${entry.meaning_zh}`,
     `主要释义：${entry.primary_meaning_zh}`,
     `JLPT：${entry.jlpt_level}`,
-    `例句：${entry.example_sentence || "-"}`,
-    `例句翻译：${entry.example_translation_zh || "-"}`,
+    `本次保存例句：${contextSnippet || "-"}`,
+    `词典例句：${entry.example_sentence || "-"}`,
     generated ? "说明：当前为占位 AI 词条，后续可替换为真实模型生成结果。" : "",
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function extractContextSnippet(sentenceText, selectedText) {
+  const text = String(sentenceText || "").replace(/\s+/g, " ").trim();
+  const needle = String(selectedText || "").trim();
+  if (!text || !needle) {
+    return text;
+  }
+  if (text.length <= 36) {
+    return text;
+  }
+
+  const index = text.indexOf(needle);
+  if (index < 0) {
+    return text;
+  }
+
+  const delimiters = new Set(["。", "！", "？", "，", "、", ",", ";", "；"]);
+  let start = 0;
+  for (let i = index - 1; i >= 0; i -= 1) {
+    if (delimiters.has(text[i])) {
+      start = i + 1;
+      break;
+    }
+  }
+
+  let end = text.length;
+  for (let i = index + needle.length; i < text.length; i += 1) {
+    if (delimiters.has(text[i])) {
+      end = i + 1;
+      break;
+    }
+  }
+
+  const snippet = text.slice(start, end).trim();
+  if (snippet.length >= 8 && snippet.length < text.length) {
+    return snippet;
+  }
+  return text;
 }
 
 async function request(url, options = {}) {

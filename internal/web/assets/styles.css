@@ -208,8 +208,51 @@ textarea {
   font: inherit;
 }
 
+.inline-form {
+  display: flex;
+  gap: 12px;
+  align-items: end;
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+
+.vocabulary-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 420px) 1fr;
+  gap: 18px;
+}
+
+.vocabulary-column {
+  min-width: 0;
+}
+
+.vocabulary-list {
+  margin-top: 18px;
+}
+
+.vocabulary-list li {
+  margin-bottom: 14px;
+}
+
+.vocabulary-item {
+  display: grid;
+  gap: 4px;
+}
+
+.tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #dde8dc;
+  font-size: 12px;
+}
+
 @media (max-width: 768px) {
   .shell {
+    grid-template-columns: 1fr;
+  }
+
+  .vocabulary-layout {
     grid-template-columns: 1fr;
   }
 }
