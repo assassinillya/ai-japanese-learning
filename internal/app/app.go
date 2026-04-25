@@ -32,13 +32,13 @@ func New(cfg *config.Config) (*App, error) {
 	authService := service.NewAuthService(userRepo, cfg.TokenSecret)
 	profileService := service.NewProfileService(userRepo)
 	languageService := service.NewLanguageService()
-	translationService := service.NewTranslationService()
-	articleService := service.NewArticleService(articleRepo, languageService, translationService)
 	aiService := service.NewAIService(aiRepo)
+	translationService := service.NewTranslationService(aiService)
+	articleService := service.NewArticleService(articleRepo, languageService, translationService)
 	dictionaryService := service.NewDictionaryService(dictionaryRepo, aiService)
 	vocabularyService := service.NewVocabularyService(vocabularyRepo, dictionaryRepo, articleRepo)
-	challengeService := service.NewChallengeService(articleRepo, dictionaryRepo, challengeRepo, dictionaryService)
-	reviewService := service.NewReviewService(vocabularyRepo, dictionaryRepo, reviewRepo)
+	challengeService := service.NewChallengeService(articleRepo, dictionaryRepo, challengeRepo, dictionaryService, aiService)
+	reviewService := service.NewReviewService(vocabularyRepo, dictionaryRepo, reviewRepo, aiService)
 
 	router := handler.NewRouter(
 		authService,

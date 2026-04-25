@@ -38,6 +38,28 @@ func (r *Router) handleReviewQuestions(w http.ResponseWriter, req *http.Request)
 	r.handleReviewDue(w, req)
 }
 
+func (r *Router) handleReviewRecords(w http.ResponseWriter, req *http.Request) {
+	user, err := currentUser(req.Context())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	limit := 20
+	if raw := req.URL.Query().Get("limit"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err == nil {
+			limit = parsed
+		}
+	}
+	items, err := r.reviewService.Records(req.Context(), user.ID, limit)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
 func (r *Router) handleReviewAnswer(w http.ResponseWriter, req *http.Request) {
 	user, err := currentUser(req.Context())
 	if err != nil {

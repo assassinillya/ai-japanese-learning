@@ -170,6 +170,11 @@ type ChallengeQuestionAttempt struct {
 	AnsweredAt     time.Time `json:"answered_at"`
 }
 
+type ReadingAnswerDetail struct {
+	Attempt  ChallengeQuestionAttempt `json:"attempt"`
+	Question ChallengeQuestion        `json:"question"`
+}
+
 type VocabularyReviewQuestion struct {
 	ID                int64     `json:"id"`
 	DictionaryEntryID int64     `json:"dictionary_entry_id"`
@@ -202,6 +207,15 @@ type VocabularyReviewRecord struct {
 	SelectedOption   string    `json:"selected_option"`
 	IsCorrect        bool      `json:"is_correct"`
 	ReviewedAt       time.Time `json:"reviewed_at"`
+}
+
+type VocabularyReviewRecordDetail struct {
+	Record          VocabularyReviewRecord   `json:"record"`
+	UserVocabulary  UserVocabulary           `json:"user_vocabulary"`
+	Dictionary      DictionaryEntry          `json:"dictionary_entry"`
+	Question        VocabularyReviewQuestion `json:"question"`
+	ArticleTitle    *string                  `json:"article_title,omitempty"`
+	ContextSentence string                   `json:"context_sentence"`
 }
 
 type AICacheEntry struct {

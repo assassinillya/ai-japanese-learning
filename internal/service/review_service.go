@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"slices"
@@ -16,17 +17,20 @@ type ReviewService struct {
 	vocabularyRepo *repository.VocabularyRepository
 	dictionaryRepo *repository.DictionaryRepository
 	reviewRepo     *repository.ReviewRepository
+	aiService      *AIService
 }
 
 func NewReviewService(
 	vocabularyRepo *repository.VocabularyRepository,
 	dictionaryRepo *repository.DictionaryRepository,
 	reviewRepo *repository.ReviewRepository,
+	aiService *AIService,
 ) *ReviewService {
 	return &ReviewService{
 		vocabularyRepo: vocabularyRepo,
 		dictionaryRepo: dictionaryRepo,
 		reviewRepo:     reviewRepo,
+		aiService:      aiService,
 	}
 }
 
@@ -65,12 +69,29 @@ func (s *ReviewService) GetOrCreateQuestion(ctx context.Context, entry model.Dic
 		return nil, err
 	}
 
+	aiModel := "placeholder-vocabulary-review-generator"
+	promptVersion := "v0.8-review"
+	taskType := "vocabulary_review_question"
+	request := reviewQuestionCacheRequest{
+		DictionaryEntryID: entry.ID,
+		Surface:           entry.Surface,
+		PrimaryMeaningZH:  entry.PrimaryMeaningZH,
+		MeaningZH:         entry.MeaningZH,
+		PartOfSpeech:      entry.PartOfSpeech,
+		JLPTLevel:         entry.JLPTLevel,
+	}
+	cacheKey, inputHash := s.reviewQuestionCacheKey(request, taskType, aiModel, promptVersion)
+	if cached, ok := s.getCachedReviewQuestion(ctx, cacheKey); ok {
+		cached.DictionaryEntryID = entry.ID
+		cached.ID = 0
+		cached.CreatedAt = time.Time{}
+		return s.reviewRepo.CreateQuestion(ctx, cached)
+	}
+
 	options, correctOption, err := s.buildMeaningOptions(ctx, entry)
 	if err != nil {
 		return nil, err
 	}
-	aiModel := "placeholder-vocabulary-review-generator"
-	promptVersion := "v0.7"
 	question := &model.VocabularyReviewQuestion{
 		DictionaryEntryID: entry.ID,
 		QuestionText:      entry.Surface,
@@ -84,7 +105,15 @@ func (s *ReviewService) GetOrCreateQuestion(ctx context.Context, entry model.Dic
 		AIModel:           &aiModel,
 		PromptVersion:     &promptVersion,
 	}
+	s.storeCachedReviewQuestion(ctx, taskType, inputHash, cacheKey, request, question, aiModel, promptVersion)
 	return s.reviewRepo.CreateQuestion(ctx, question)
+}
+
+func (s *ReviewService) Records(ctx context.Context, userID int64, limit int) ([]model.VocabularyReviewRecordDetail, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	return s.reviewRepo.ListRecordsByUser(ctx, userID, limit)
 }
 
 func (s *ReviewService) SubmitAnswer(ctx context.Context, userID, userVocabularyID, reviewQuestionID int64, selectedOption string) (map[string]any, error) {
@@ -192,6 +221,51 @@ func meaningForReview(entry model.DictionaryEntry) string {
 		return strings.TrimSpace(entry.PrimaryMeaningZH)
 	}
 	return strings.TrimSpace(entry.MeaningZH)
+}
+
+type reviewQuestionCacheRequest struct {
+	DictionaryEntryID int64  `json:"dictionary_entry_id"`
+	Surface           string `json:"surface"`
+	PrimaryMeaningZH  string `json:"primary_meaning_zh"`
+	MeaningZH         string `json:"meaning_zh"`
+	PartOfSpeech      string `json:"part_of_speech"`
+	JLPTLevel         string `json:"jlpt_level"`
+}
+
+func (s *ReviewService) reviewQuestionCacheKey(request reviewQuestionCacheRequest, taskType, aiModel, promptVersion string) (string, string) {
+	if s.aiService == nil {
+		return "", ""
+	}
+	raw, _ := json.Marshal(request)
+	inputHash := s.aiService.HashInput(string(raw))
+	return s.aiService.CacheKey(taskType, inputHash, aiModel, promptVersion), inputHash
+}
+
+func (s *ReviewService) getCachedReviewQuestion(ctx context.Context, cacheKey string) (*model.VocabularyReviewQuestion, bool) {
+	if s.aiService == nil || cacheKey == "" {
+		return nil, false
+	}
+	cached, ok, err := s.aiService.GetCached(ctx, cacheKey)
+	if err != nil || !ok {
+		return nil, false
+	}
+	var question model.VocabularyReviewQuestion
+	if err := json.Unmarshal([]byte(cached.ResponseJSON), &question); err != nil || strings.TrimSpace(question.QuestionText) == "" {
+		return nil, false
+	}
+	return &question, true
+}
+
+func (s *ReviewService) storeCachedReviewQuestion(ctx context.Context, taskType, inputHash, cacheKey string, request reviewQuestionCacheRequest, question *model.VocabularyReviewQuestion, aiModel, promptVersion string) {
+	if s.aiService == nil || cacheKey == "" {
+		return
+	}
+	cacheQuestion := *question
+	cacheQuestion.ID = 0
+	cacheQuestion.CreatedAt = time.Time{}
+	if _, err := s.aiService.StoreCached(ctx, taskType, inputHash, cacheKey, request, cacheQuestion, aiModel, promptVersion); err != nil {
+		s.aiService.LogFailure(ctx, taskType, request, err, aiModel, promptVersion)
+	}
 }
 
 func nextReviewState(item model.UserVocabulary, isCorrect bool) (model.VocabularyStatus, int, int, int, int, time.Time) {

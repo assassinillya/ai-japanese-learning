@@ -121,6 +121,27 @@ func (r *Router) handleListPostQuiz(w http.ResponseWriter, req *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"items": questions})
 }
 
+func (r *Router) handlePostQuizResults(w http.ResponseWriter, req *http.Request) {
+	user, err := currentUser(req.Context())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	articleID, err := articleIDFromPath(strings.TrimSuffix(req.URL.Path, "/post-quiz/results"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid article id"})
+		return
+	}
+
+	items, err := r.challengeService.ListPostQuizResults(req.Context(), user.ID, articleID)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
 func (r *Router) handleSubmitChallengeAnswer(w http.ResponseWriter, req *http.Request) {
 	user, err := currentUser(req.Context())
 	if err != nil {

@@ -110,6 +110,7 @@ func (s *ArticleService) Process(ctx context.Context, userID, articleID int64) (
 	note := "Rebuilt sentences from stored Japanese article content."
 	if translated == "" {
 		translated, sourceType, aiGenerated, note = s.translationService.TranslateToJapanese(
+			ctx,
 			article.OriginalLanguage,
 			*article.OriginalContent,
 			article.JLPTLevel,

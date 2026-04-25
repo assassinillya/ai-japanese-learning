@@ -1,6 +1,6 @@
-# ai-japanese-learning v0.8
+# ai-japanese-learning v0.8-review
 
-当前版本已经从 `v0.7` 推进到 `v0.8`，实现了 AI 缓存、AI 调用日志和词典生成约束的基础版本。
+当前版本已经从 `v0.8` 推进到 `v0.8-review`，补齐 review 后发现的 AI 缓存覆盖和结果查询缺口。
 
 已完成：
 
@@ -40,7 +40,11 @@
 - AI 缓存表 `ai_cache`
 - AI 调用日志表 `ai_logs`
 - 词典占位生成结果会写入 AI 缓存和日志
+- 非日语文章占位翻译结果会写入 AI 缓存和日志
+- 挑战阅读题、阅读后测验题、词汇复习题的占位生成结果会写入 AI 缓存和日志
 - 词典生成结果入库前会校验必填字段、JLPT 等级和来源枚举
+- 阅读后测验答题结果查询接口 `GET /api/reading/articles/{id}/post-quiz/results`
+- 词汇复习记录查询接口 `GET /api/review/records`
 - 静态前端页面：登录、注册、首页、个人中心、文章上传、文章详情、阅读模式、查词弹窗
 
 ## 版本记录
@@ -80,6 +84,10 @@
   - 封装基础 AI Service，统一生成 cache key、输入 hash、缓存读写和日志写入。
   - 词典占位生成接入 AI 缓存，避免同一输入重复生成。
   - 词典生成结果入库前校验必填字段、JLPT 枚举和 source 枚举。
+- `v0.8-review`
+  - 将非日语文章占位翻译、挑战阅读题、阅读后测验题、词汇复习题接入统一 AI 缓存和日志。
+  - 新增阅读后测验答题结果查询接口。
+  - 新增词汇复习记录查询接口。
 
 后续每次功能或结构改动，都需要同步更新 `README.md` 的版本记录和当前说明。
 
@@ -198,7 +206,7 @@ http://localhost:8080
 - `v0.5` 的挑战题生成和干扰项目前仍是占位算法实现，用于先打通挑战阅读与题目缓存流程。后续接入真实 AI 后，主要替换 `internal/service/challenge_service.go`。
 - `v0.6` 的阅读后测验题目前复用占位题目生成逻辑，优先围绕文章句子中可匹配或可生成的词条出中文释义选择题。后续接入真实 AI 后，继续替换 `internal/service/challenge_service.go` 中的 post quiz 生成逻辑。
 - `v0.7` 的词汇复习题目前复用占位干扰项生成逻辑，正确答案来自词典 `primary_meaning_zh`。后续接入真实 AI 后，主要替换 `internal/service/review_service.go` 中的复习题生成逻辑。
-- `v0.8` 先把词典占位生成接入统一 AI 缓存和日志，后续接入真实 AI 时可以沿用 `internal/service/ai_service.go` 和 `ai_cache` / `ai_logs` 表。
+- `v0.8-review` 已把当前所有占位 AI 生成路径接入统一 AI 缓存和日志，包括翻译、词典、挑战阅读题、阅读后测验题和词汇复习题。后续接入真实 AI 时可以沿用 `internal/service/ai_service.go` 和 `ai_cache` / `ai_logs` 表。
 
 ## v0.5 Review 记录
 
@@ -261,3 +269,15 @@ http://localhost:8080
 - 查询不存在的词条时，会生成占位词典结果、校验字段、写入 `ai_cache` 和 `ai_logs`，再写入 `dictionary_entries`。
 - 再次查询同一文本时会优先命中 `dictionary_entries`，避免重复生成。
 - 本地 HTTP 烟测中，测试词 `v08smokeword...` 返回 `generated = true`，并验证 `ai_cache` 和 `ai_logs` 中各写入 1 条对应记录。
+
+## v0.8-review 验证记录
+
+本轮补齐 0.1 到 0.8 迭代 review 后发现的缺口，重点是扩大 AI 缓存覆盖范围，并补上结果查询接口。
+
+已验证：
+
+- `go test ./...` 通过。
+- 非日语文章占位翻译通过 `AIService` 写入 `ai_cache` 和 `ai_logs`。
+- 挑战阅读题、阅读后测验题、词汇复习题生成通过 `AIService` 读写缓存和日志。
+- `GET /api/reading/articles/{id}/post-quiz/results` 可返回当前用户在指定文章下的阅读后测验答题记录和题目信息。
+- `GET /api/review/records` 可返回当前用户的词汇复习记录、题目、生词和词典信息。

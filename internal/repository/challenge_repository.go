@@ -168,6 +168,63 @@ func (r *ChallengeRepository) CreateAttempt(ctx context.Context, attempt *model.
 	return attempt, nil
 }
 
+func (r *ChallengeRepository) ListAttemptsByArticleAndType(ctx context.Context, userID, articleID int64, questionType string) ([]model.ReadingAnswerDetail, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT a.id, a.question_id, a.user_id, a.selected_option, a.is_correct, a.answered_at,
+		       q.id, q.article_id, q.sentence_id, q.question_type, q.question_order, q.sentence_text, q.masked_sentence,
+		       q.correct_entry_id, q.correct_answer_text, q.option_a, q.option_b, q.option_c, q.option_d,
+		       q.correct_option, q.explanation, q.jlpt_level, q.ai_model, q.prompt_version, q.created_at
+		FROM challenge_question_attempts a
+		INNER JOIN challenge_questions q ON q.id = a.question_id
+		INNER JOIN articles ar ON ar.id = q.article_id
+		WHERE a.user_id = $1
+		  AND q.article_id = $2
+		  AND q.question_type = $3
+		  AND (ar.user_id = $1 OR ar.source_type = 'builtin')
+		ORDER BY a.answered_at DESC, q.question_order ASC
+	`, userID, articleID, questionType)
+	if err != nil {
+		return nil, fmt.Errorf("list reading attempts by article and type: %w", err)
+	}
+	defer rows.Close()
+
+	var items []model.ReadingAnswerDetail
+	for rows.Next() {
+		var item model.ReadingAnswerDetail
+		if err := rows.Scan(
+			&item.Attempt.ID,
+			&item.Attempt.QuestionID,
+			&item.Attempt.UserID,
+			&item.Attempt.SelectedOption,
+			&item.Attempt.IsCorrect,
+			&item.Attempt.AnsweredAt,
+			&item.Question.ID,
+			&item.Question.ArticleID,
+			&item.Question.SentenceID,
+			&item.Question.QuestionType,
+			&item.Question.QuestionOrder,
+			&item.Question.SentenceText,
+			&item.Question.MaskedSentence,
+			&item.Question.CorrectEntryID,
+			&item.Question.CorrectAnswerText,
+			&item.Question.OptionA,
+			&item.Question.OptionB,
+			&item.Question.OptionC,
+			&item.Question.OptionD,
+			&item.Question.CorrectOption,
+			&item.Question.Explanation,
+			&item.Question.JLPTLevel,
+			&item.Question.AIModel,
+			&item.Question.PromptVersion,
+			&item.Question.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan reading answer detail: %w", err)
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
 type challengeQuestionScanner interface {
 	Scan(dest ...any) error
 }
