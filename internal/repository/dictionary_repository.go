@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"ai-japanese-learning/internal/model"
 )
@@ -93,6 +94,57 @@ func (r *DictionaryRepository) Create(ctx context.Context, entry *model.Dictiona
 		return nil, fmt.Errorf("create dictionary entry: %w", err)
 	}
 	return entry, nil
+}
+
+func (r *DictionaryRepository) ListAll(ctx context.Context) ([]model.DictionaryEntry, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, surface, lemma, reading, romaji, part_of_speech, meaning_zh, meaning_ja, meaning_en,
+		       primary_meaning_zh, jlpt_level, example_sentence, example_translation_zh, conjugation_type,
+		       is_common, source, verified, confidence_score::text, ai_model, prompt_version, created_at, updated_at
+		FROM dictionary_entries
+		ORDER BY verified DESC, source = 'builtin' DESC, id ASC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("list dictionary entries: %w", err)
+	}
+	defer rows.Close()
+
+	var entries []model.DictionaryEntry
+	for rows.Next() {
+		entry, err := scanDictionaryEntry(rows)
+		if err != nil {
+			return nil, err
+		}
+		entries = append(entries, *entry)
+	}
+	return entries, rows.Err()
+}
+
+func (r *DictionaryRepository) ListDistractors(ctx context.Context, excludeID int64, partOfSpeech string, limit int) ([]model.DictionaryEntry, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, surface, lemma, reading, romaji, part_of_speech, meaning_zh, meaning_ja, meaning_en,
+		       primary_meaning_zh, jlpt_level, example_sentence, example_translation_zh, conjugation_type,
+		       is_common, source, verified, confidence_score::text, ai_model, prompt_version, created_at, updated_at
+		FROM dictionary_entries
+		WHERE id <> $1
+		  AND ($2 = '' OR part_of_speech = $2 OR part_of_speech = 'unknown')
+		ORDER BY verified DESC, source = 'builtin' DESC, id ASC
+		LIMIT $3
+	`, excludeID, strings.TrimSpace(partOfSpeech), limit)
+	if err != nil {
+		return nil, fmt.Errorf("list distractor dictionary entries: %w", err)
+	}
+	defer rows.Close()
+
+	var entries []model.DictionaryEntry
+	for rows.Next() {
+		entry, err := scanDictionaryEntry(rows)
+		if err != nil {
+			return nil, err
+		}
+		entries = append(entries, *entry)
+	}
+	return entries, rows.Err()
 }
 
 type dictionaryEntryScanner interface {

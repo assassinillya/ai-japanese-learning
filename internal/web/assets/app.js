@@ -5,6 +5,12 @@ const state = {
   selectedVocabularyId: null,
   readingArticle: null,
   vocabularyFilter: "",
+  challenge: {
+    questions: [],
+    currentIndex: 0,
+    selectedOption: "",
+    answered: false,
+  },
   lookup: {
     timer: null,
     currentText: "",
@@ -28,6 +34,12 @@ const articleDetail = document.getElementById("article-detail");
 const sentenceList = document.getElementById("sentence-list");
 const readingHeader = document.getElementById("reading-header");
 const readingContent = document.getElementById("reading-content");
+const challengeHeader = document.getElementById("challenge-header");
+const challengeCard = document.getElementById("challenge-card");
+const challengeProgress = document.getElementById("challenge-progress");
+const challengeSentence = document.getElementById("challenge-sentence");
+const challengeOptions = document.getElementById("challenge-options");
+const challengeFeedback = document.getElementById("challenge-feedback");
 const vocabularyList = document.getElementById("vocabulary-list");
 const vocabularyDetail = document.getElementById("vocabulary-detail");
 const vocabularyFilterForm = document.getElementById("vocabulary-filter-form");
@@ -40,6 +52,9 @@ const popupTitle = document.getElementById("lookup-popup-title");
 const popupBody = document.getElementById("lookup-popup-body");
 const addVocabularyButton = document.getElementById("add-vocabulary-button");
 const openReadingButton = document.getElementById("open-reading-button");
+const openChallengeButton = document.getElementById("open-challenge-button");
+const submitChallengeAnswerButton = document.getElementById("submit-challenge-answer-button");
+const nextChallengeQuestionButton = document.getElementById("next-challenge-question-button");
 const reprocessButton = document.getElementById("reprocess-button");
 
 document.querySelectorAll("[data-view]").forEach((button) => {
@@ -144,6 +159,15 @@ openReadingButton.addEventListener("click", async () => {
   showView("reading");
 });
 
+openChallengeButton.addEventListener("click", async () => {
+  if (!state.selectedArticleId) {
+    setMessage("请先选择一篇文章");
+    return;
+  }
+  await loadChallengeQuestions(state.selectedArticleId);
+  showView("challenge");
+});
+
 addVocabularyButton.addEventListener("click", async () => {
   if (!state.lookup.currentEntry) {
     return;
@@ -230,7 +254,58 @@ openVocabularyArticleButton.addEventListener("click", async () => {
   showView("detail");
 });
 
+submitChallengeAnswerButton.addEventListener("click", async () => {
+  const question = state.challenge.questions[state.challenge.currentIndex];
+  if (!question) {
+    setMessage("当前没有可作答的题目");
+    return;
+  }
+  if (!state.challenge.selectedOption) {
+    setMessage("请先选择一个选项");
+    return;
+  }
+  if (state.challenge.answered) {
+    setMessage("这题已经提交过了");
+    return;
+  }
+
+  const result = await request(`/api/reading/questions/${question.id}/answer`, {
+    method: "POST",
+    body: JSON.stringify({ selected_option: state.challenge.selectedOption }),
+  });
+  if (!result.ok) {
+    return;
+  }
+
+  state.challenge.answered = true;
+  challengeFeedback.classList.remove("hidden");
+  challengeFeedback.textContent = [
+    result.data.is_correct ? "回答正确" : "回答错误",
+    `正确选项：${result.data.correct_option}`,
+    `正确答案：${result.data.correct_answer_text}`,
+    `解析：${result.data.explanation}`,
+  ].join("\n");
+  renderChallengeQuestion();
+});
+
+nextChallengeQuestionButton.addEventListener("click", () => {
+  if (state.challenge.currentIndex + 1 >= state.challenge.questions.length) {
+    setMessage("挑战阅读已完成");
+    return;
+  }
+  state.challenge.currentIndex += 1;
+  state.challenge.selectedOption = "";
+  state.challenge.answered = false;
+  challengeFeedback.classList.add("hidden");
+  challengeFeedback.textContent = "";
+  renderChallengeQuestion();
+});
+
 readingContent.addEventListener("mouseup", () => {
+  scheduleLookupFromSelection();
+});
+
+challengeSentence.addEventListener("mouseup", () => {
   scheduleLookupFromSelection();
 });
 
@@ -276,6 +351,8 @@ function renderUser() {
     sentenceList.innerHTML = "";
     readingHeader.textContent = "请选择一篇文章进入阅读。";
     readingContent.innerHTML = "";
+    challengeHeader.textContent = "请选择一篇文章开始挑战阅读。";
+    challengeCard.classList.add("hidden");
     vocabularyList.innerHTML = "";
     vocabularyDetail.textContent = "请选择一个生词查看详情。";
     openVocabularyArticleButton.disabled = true;
@@ -417,6 +494,74 @@ async function loadReadingArticle(articleId) {
     .join("");
 }
 
+async function loadChallengeQuestions(articleId) {
+  const result = await request(`/api/reading/articles/${articleId}/challenge-questions`);
+  if (!result.ok) {
+    return;
+  }
+
+  state.challenge.questions = result.data.items || [];
+  state.challenge.currentIndex = 0;
+  state.challenge.selectedOption = "";
+  state.challenge.answered = false;
+  hideLookupPopup();
+
+  if (state.challenge.questions.length === 0) {
+    challengeHeader.textContent = "当前文章还没有可用的挑战题。";
+    challengeCard.classList.add("hidden");
+    return;
+  }
+
+  challengeHeader.textContent = "挑战阅读会按文章顺序出题。你仍然可以在题干句子中选中文本查词。";
+  challengeCard.classList.remove("hidden");
+  challengeFeedback.classList.add("hidden");
+  challengeFeedback.textContent = "";
+  renderChallengeQuestion();
+}
+
+function renderChallengeQuestion() {
+  const question = state.challenge.questions[state.challenge.currentIndex];
+  if (!question) {
+    challengeCard.classList.add("hidden");
+    return;
+  }
+
+  challengeProgress.textContent = `第 ${state.challenge.currentIndex + 1} / ${state.challenge.questions.length} 题`;
+  challengeSentence.dataset.sentenceId = question.sentence_id;
+  challengeSentence.dataset.sentenceText = question.sentence_text;
+  challengeSentence.textContent = question.masked_sentence;
+
+  const options = [
+    ["A", question.option_a],
+    ["B", question.option_b],
+    ["C", question.option_c],
+    ["D", question.option_d],
+  ];
+  challengeOptions.innerHTML = options
+    .map(([key, value]) => {
+      const selected = state.challenge.selectedOption === key;
+      const isCorrect = state.challenge.answered && question.correct_option === key;
+      const isIncorrect = state.challenge.answered && selected && question.correct_option !== key;
+      const className = ["challenge-option", isCorrect ? "correct" : "", isIncorrect ? "incorrect" : ""].filter(Boolean).join(" ");
+      return `
+        <label class="${className}">
+          <input type="radio" name="challenge-option" value="${key}" ${selected ? "checked" : ""} ${state.challenge.answered ? "disabled" : ""} />
+          <span>${key}. ${escapeHTML(value)}</span>
+        </label>
+      `;
+    })
+    .join("");
+
+  challengeOptions.querySelectorAll('input[name="challenge-option"]').forEach((input) => {
+    input.addEventListener("change", () => {
+      state.challenge.selectedOption = input.value;
+    });
+  });
+
+  submitChallengeAnswerButton.disabled = state.challenge.answered;
+  nextChallengeQuestionButton.disabled = !state.challenge.answered;
+}
+
 async function loadVocabularyList() {
   const suffix = state.vocabularyFilter ? `?status=${encodeURIComponent(state.vocabularyFilter)}` : "";
   const result = await request(`/api/vocabulary${suffix}`);
@@ -512,7 +657,9 @@ function getSelectionState() {
 
   const range = selection.getRangeAt(0);
   const text = selection.toString().trim();
-  if (!text || !readingContent.contains(range.commonAncestorContainer)) {
+  const withinReading = readingContent.contains(range.commonAncestorContainer);
+  const withinChallenge = challengeSentence.contains(range.commonAncestorContainer);
+  if (!text || (!withinReading && !withinChallenge)) {
     return null;
   }
 

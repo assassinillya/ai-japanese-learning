@@ -138,3 +138,30 @@ type VocabularyDetail struct {
 	ArticleTitle    *string         `json:"article_title,omitempty"`
 	ExampleSentence string          `json:"example_sentence"`
 }
+
+type ChallengeQuestion struct {
+	ID                int64     `json:"id"`
+	ArticleID         int64     `json:"article_id"`
+	SentenceID        int64     `json:"sentence_id"`
+	QuestionOrder     int       `json:"question_order"`
+	SentenceText      string    `json:"sentence_text"`
+	MaskedSentence    string    `json:"masked_sentence"`
+	CorrectEntryID    int64     `json:"correct_entry_id"`
+	CorrectAnswerText string    `json:"correct_answer_text"`
+	OptionA           string    `json:"option_a"`
+	OptionB           string    `json:"option_b"`
+	OptionC           string    `json:"option_c"`
+	OptionD           string    `json:"option_d"`
+	CorrectOption     string    `json:"correct_option"`
+	Explanation       string    `json:"explanation"`
+	CreatedAt         time.Time `json:"created_at"`
+}
+
+type ChallengeQuestionAttempt struct {
+	ID             int64     `json:"id"`
+	QuestionID     int64     `json:"question_id"`
+	UserID         int64     `json:"user_id"`
+	SelectedOption string    `json:"selected_option"`
+	IsCorrect      bool      `json:"is_correct"`
+	AnsweredAt     time.Time `json:"answered_at"`
+}

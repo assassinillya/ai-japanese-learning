@@ -26,6 +26,7 @@ func New(cfg *config.Config) (*App, error) {
 	articleRepo := repository.NewArticleRepository(postgres)
 	dictionaryRepo := repository.NewDictionaryRepository(postgres)
 	vocabularyRepo := repository.NewVocabularyRepository(postgres)
+	challengeRepo := repository.NewChallengeRepository(postgres)
 	authService := service.NewAuthService(userRepo, cfg.TokenSecret)
 	profileService := service.NewProfileService(userRepo)
 	languageService := service.NewLanguageService()
@@ -33,6 +34,7 @@ func New(cfg *config.Config) (*App, error) {
 	articleService := service.NewArticleService(articleRepo, languageService, translationService)
 	dictionaryService := service.NewDictionaryService(dictionaryRepo)
 	vocabularyService := service.NewVocabularyService(vocabularyRepo, dictionaryRepo, articleRepo)
+	challengeService := service.NewChallengeService(articleRepo, dictionaryRepo, challengeRepo, dictionaryService)
 
 	router := handler.NewRouter(
 		authService,
@@ -40,6 +42,7 @@ func New(cfg *config.Config) (*App, error) {
 		articleService,
 		dictionaryService,
 		vocabularyService,
+		challengeService,
 		web.NewStaticServer(),
 	)
 

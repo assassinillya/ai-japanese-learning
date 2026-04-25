@@ -22,6 +22,7 @@ type Router struct {
 	articleService    *service.ArticleService
 	dictionaryService *service.DictionaryService
 	vocabularyService *service.VocabularyService
+	challengeService  *service.ChallengeService
 }
 
 type staticServer interface {
@@ -34,6 +35,7 @@ func NewRouter(
 	articleService *service.ArticleService,
 	dictionaryService *service.DictionaryService,
 	vocabularyService *service.VocabularyService,
+	challengeService *service.ChallengeService,
 	static staticServer,
 ) *Router {
 	r := &Router{
@@ -43,6 +45,7 @@ func NewRouter(
 		articleService:    articleService,
 		dictionaryService: dictionaryService,
 		vocabularyService: vocabularyService,
+		challengeService:  challengeService,
 	}
 
 	r.mux.Handle("/assets/", http.StripPrefix("/assets/", static.Handler()))
@@ -62,6 +65,9 @@ func NewRouter(
 	r.mux.HandleFunc("POST /api/articles/{id}/process", r.withAuth(r.handleArticleProcess))
 	r.mux.HandleFunc("GET /api/articles/{id}/sentences", r.withAuth(r.handleArticleSentences))
 	r.mux.HandleFunc("GET /api/reading/articles/{id}", r.withAuth(r.handleReadingArticle))
+	r.mux.HandleFunc("POST /api/reading/articles/{id}/challenge-questions", r.withAuth(r.handleGenerateChallengeQuestions))
+	r.mux.HandleFunc("GET /api/reading/articles/{id}/challenge-questions", r.withAuth(r.handleListChallengeQuestions))
+	r.mux.HandleFunc("POST /api/reading/questions/{id}/answer", r.withAuth(r.handleSubmitChallengeAnswer))
 	r.mux.HandleFunc("GET /api/dictionary/lookup", r.withAuth(r.handleDictionaryLookup))
 	r.mux.HandleFunc("GET /api/dictionary/{id}", r.withAuth(r.handleDictionaryDetail))
 	r.mux.HandleFunc("GET /api/vocabulary", r.withAuth(r.handleListVocabulary))
