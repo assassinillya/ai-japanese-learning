@@ -23,6 +23,7 @@ type Router struct {
 	dictionaryService *service.DictionaryService
 	vocabularyService *service.VocabularyService
 	challengeService  *service.ChallengeService
+	reviewService     *service.ReviewService
 }
 
 type staticServer interface {
@@ -36,6 +37,7 @@ func NewRouter(
 	dictionaryService *service.DictionaryService,
 	vocabularyService *service.VocabularyService,
 	challengeService *service.ChallengeService,
+	reviewService *service.ReviewService,
 	static staticServer,
 ) *Router {
 	r := &Router{
@@ -46,6 +48,7 @@ func NewRouter(
 		dictionaryService: dictionaryService,
 		vocabularyService: vocabularyService,
 		challengeService:  challengeService,
+		reviewService:     reviewService,
 	}
 
 	r.mux.Handle("/assets/", http.StripPrefix("/assets/", static.Handler()))
@@ -79,6 +82,9 @@ func NewRouter(
 	r.mux.HandleFunc("GET /api/vocabulary/{id}/context", r.withAuth(r.handleVocabularyContext))
 	r.mux.HandleFunc("PUT /api/vocabulary/{id}/status", r.withAuth(r.handleUpdateVocabularyStatus))
 	r.mux.HandleFunc("DELETE /api/vocabulary/{id}", r.withAuth(r.handleDeleteVocabulary))
+	r.mux.HandleFunc("GET /api/review/due", r.withAuth(r.handleReviewDue))
+	r.mux.HandleFunc("POST /api/review/questions", r.withAuth(r.handleReviewQuestions))
+	r.mux.HandleFunc("POST /api/review/answer", r.withAuth(r.handleReviewAnswer))
 
 	return r
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"ai-japanese-learning/internal/model"
 )
@@ -131,6 +132,40 @@ func (r *VocabularyRepository) GetDetail(ctx context.Context, userID, vocabulary
 	return item, nil
 }
 
+func (r *VocabularyRepository) ListDueForReview(ctx context.Context, userID int64, limit int) ([]model.VocabularyDetail, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT uv.id, uv.user_id, uv.dictionary_entry_id, uv.article_id, uv.source_sentence_id, uv.selected_text, uv.source_sentence_text,
+		       uv.status, uv.familiarity, uv.correct_count, uv.wrong_count, uv.consecutive_correct_count, uv.added_at,
+		       uv.last_reviewed_at, uv.next_review_at, uv.created_at, uv.updated_at,
+		       de.id, de.surface, de.lemma, de.reading, de.romaji, de.part_of_speech, de.meaning_zh, de.meaning_ja, de.meaning_en,
+		       de.primary_meaning_zh, de.jlpt_level, de.example_sentence, de.example_translation_zh, de.conjugation_type,
+		       de.is_common, de.source, de.verified, de.confidence_score::text, de.ai_model, de.prompt_version, de.created_at, de.updated_at,
+		       a.title
+		FROM user_vocabulary uv
+		JOIN dictionary_entries de ON de.id = uv.dictionary_entry_id
+		LEFT JOIN articles a ON a.id = uv.article_id
+		WHERE uv.user_id = $1
+		  AND uv.status <> 'ignored'
+		  AND uv.next_review_at <= NOW()
+		ORDER BY uv.next_review_at ASC, uv.added_at ASC
+		LIMIT $2
+	`, userID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list due vocabulary for review: %w", err)
+	}
+	defer rows.Close()
+
+	var items []model.VocabularyDetail
+	for rows.Next() {
+		item, err := scanVocabularyDetail(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, *item)
+	}
+	return items, rows.Err()
+}
+
 func (r *VocabularyRepository) UpdateStatus(ctx context.Context, userID, vocabularyID int64, status model.VocabularyStatus) error {
 	result, err := r.db.ExecContext(ctx, `
 		UPDATE user_vocabulary
@@ -144,6 +179,41 @@ func (r *VocabularyRepository) UpdateStatus(ctx context.Context, userID, vocabul
 	rows, err := result.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("rows affected for update vocabulary status: %w", err)
+	}
+	if rows == 0 {
+		return ErrVocabularyNotFound
+	}
+	return nil
+}
+
+func (r *VocabularyRepository) UpdateReviewProgress(
+	ctx context.Context,
+	userID, vocabularyID int64,
+	status model.VocabularyStatus,
+	familiarity int,
+	correctCount int,
+	wrongCount int,
+	consecutiveCorrectCount int,
+	nextReviewAt time.Time,
+) error {
+	result, err := r.db.ExecContext(ctx, `
+		UPDATE user_vocabulary
+		SET status = $3,
+		    familiarity = $4,
+		    correct_count = $5,
+		    wrong_count = $6,
+		    consecutive_correct_count = $7,
+		    last_reviewed_at = NOW(),
+		    next_review_at = $8,
+		    updated_at = NOW()
+		WHERE user_id = $1 AND id = $2
+	`, userID, vocabularyID, status, familiarity, correctCount, wrongCount, consecutiveCorrectCount, nextReviewAt)
+	if err != nil {
+		return fmt.Errorf("update vocabulary review progress: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected for update vocabulary review progress: %w", err)
 	}
 	if rows == 0 {
 		return ErrVocabularyNotFound

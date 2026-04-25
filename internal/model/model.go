@@ -169,3 +169,37 @@ type ChallengeQuestionAttempt struct {
 	IsCorrect      bool      `json:"is_correct"`
 	AnsweredAt     time.Time `json:"answered_at"`
 }
+
+type VocabularyReviewQuestion struct {
+	ID                int64     `json:"id"`
+	DictionaryEntryID int64     `json:"dictionary_entry_id"`
+	QuestionText      string    `json:"question_text"`
+	CorrectAnswer     string    `json:"correct_answer"`
+	OptionA           string    `json:"option_a"`
+	OptionB           string    `json:"option_b"`
+	OptionC           string    `json:"option_c"`
+	OptionD           string    `json:"option_d"`
+	CorrectOption     string    `json:"correct_option"`
+	ExplanationZH     string    `json:"explanation_zh"`
+	AIModel           *string   `json:"ai_model,omitempty"`
+	PromptVersion     *string   `json:"prompt_version,omitempty"`
+	CreatedAt         time.Time `json:"created_at"`
+}
+
+type VocabularyReviewItem struct {
+	UserVocabulary  UserVocabulary           `json:"user_vocabulary"`
+	Dictionary      DictionaryEntry          `json:"dictionary_entry"`
+	Question        VocabularyReviewQuestion `json:"question"`
+	ArticleTitle    *string                  `json:"article_title,omitempty"`
+	ContextSentence string                   `json:"context_sentence"`
+}
+
+type VocabularyReviewRecord struct {
+	ID               int64     `json:"id"`
+	UserID           int64     `json:"user_id"`
+	UserVocabularyID int64     `json:"user_vocabulary_id"`
+	ReviewQuestionID int64     `json:"review_question_id"`
+	SelectedOption   string    `json:"selected_option"`
+	IsCorrect        bool      `json:"is_correct"`
+	ReviewedAt       time.Time `json:"reviewed_at"`
+}

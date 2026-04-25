@@ -17,6 +17,12 @@ const state = {
     selectedOption: "",
     answered: false,
   },
+  review: {
+    items: [],
+    currentIndex: 0,
+    selectedOption: "",
+    answered: false,
+  },
   lookup: {
     timer: null,
     currentText: "",
@@ -53,6 +59,13 @@ const postQuizQuestion = document.getElementById("post-quiz-question");
 const postQuizSource = document.getElementById("post-quiz-source");
 const postQuizOptions = document.getElementById("post-quiz-options");
 const postQuizFeedback = document.getElementById("post-quiz-feedback");
+const reviewHeader = document.getElementById("review-header");
+const reviewCard = document.getElementById("review-card");
+const reviewProgress = document.getElementById("review-progress");
+const reviewQuestion = document.getElementById("review-question");
+const reviewContext = document.getElementById("review-context");
+const reviewOptions = document.getElementById("review-options");
+const reviewFeedback = document.getElementById("review-feedback");
 const vocabularyList = document.getElementById("vocabulary-list");
 const vocabularyDetail = document.getElementById("vocabulary-detail");
 const vocabularyFilterForm = document.getElementById("vocabulary-filter-form");
@@ -71,6 +84,8 @@ const submitChallengeAnswerButton = document.getElementById("submit-challenge-an
 const nextChallengeQuestionButton = document.getElementById("next-challenge-question-button");
 const submitPostQuizAnswerButton = document.getElementById("submit-post-quiz-answer-button");
 const nextPostQuizQuestionButton = document.getElementById("next-post-quiz-question-button");
+const submitReviewAnswerButton = document.getElementById("submit-review-answer-button");
+const nextReviewQuestionButton = document.getElementById("next-review-question-button");
 const reprocessButton = document.getElementById("reprocess-button");
 
 document.querySelectorAll("[data-view]").forEach((button) => {
@@ -78,6 +93,9 @@ document.querySelectorAll("[data-view]").forEach((button) => {
     const view = button.dataset.view;
     if (view === "vocabulary" && state.user) {
       await loadVocabularyList();
+    }
+    if (view === "review" && state.user) {
+      await loadReviewDue();
     }
     showView(view);
   });
@@ -373,6 +391,60 @@ nextPostQuizQuestionButton.addEventListener("click", () => {
   renderPostQuizQuestion();
 });
 
+submitReviewAnswerButton.addEventListener("click", async () => {
+  const item = state.review.items[state.review.currentIndex];
+  if (!item) {
+    setMessage("当前没有可作答的复习题");
+    return;
+  }
+  if (!state.review.selectedOption) {
+    setMessage("请先选择一个选项");
+    return;
+  }
+  if (state.review.answered) {
+    setMessage("这题已经提交过了");
+    return;
+  }
+
+  const result = await request("/api/review/answer", {
+    method: "POST",
+    body: JSON.stringify({
+      user_vocabulary_id: item.user_vocabulary.id,
+      review_question_id: item.question.id,
+      selected_option: state.review.selectedOption,
+    }),
+  });
+  if (!result.ok) {
+    return;
+  }
+
+  state.review.answered = true;
+  reviewFeedback.classList.remove("hidden");
+  reviewFeedback.textContent = [
+    result.data.is_correct ? "回答正确" : "回答错误",
+    `正确选项：${result.data.correct_option}`,
+    `正确答案：${result.data.correct_answer}`,
+    `当前状态：${result.data.status}`,
+    `下次复习：${formatDateTime(result.data.next_review_at)}`,
+    `解析：${result.data.explanation}`,
+  ].join("\n");
+  await loadVocabularyList();
+  renderReviewQuestion();
+});
+
+nextReviewQuestionButton.addEventListener("click", () => {
+  if (state.review.currentIndex + 1 >= state.review.items.length) {
+    setMessage("词汇复习已完成");
+    return;
+  }
+  state.review.currentIndex += 1;
+  state.review.selectedOption = "";
+  state.review.answered = false;
+  reviewFeedback.classList.add("hidden");
+  reviewFeedback.textContent = "";
+  renderReviewQuestion();
+});
+
 readingContent.addEventListener("mouseup", () => {
   scheduleLookupFromSelection();
 });
@@ -427,6 +499,8 @@ function renderUser() {
     challengeCard.classList.add("hidden");
     postQuizHeader.textContent = "请选择一篇文章开始测验。";
     postQuizCard.classList.add("hidden");
+    reviewHeader.textContent = "加载今日待复习生词。";
+    reviewCard.classList.add("hidden");
     vocabularyList.innerHTML = "";
     vocabularyDetail.textContent = "请选择一个生词查看详情。";
     openVocabularyArticleButton.disabled = true;
@@ -701,6 +775,73 @@ function renderPostQuizQuestion() {
 
   submitPostQuizAnswerButton.disabled = state.postQuiz.answered;
   nextPostQuizQuestionButton.disabled = !state.postQuiz.answered;
+}
+
+async function loadReviewDue() {
+  const result = await request("/api/review/due");
+  if (!result.ok) {
+    return;
+  }
+
+  state.review.items = result.data.items || [];
+  state.review.currentIndex = 0;
+  state.review.selectedOption = "";
+  state.review.answered = false;
+
+  if (state.review.items.length === 0) {
+    reviewHeader.textContent = "当前没有到期需要复习的生词。";
+    reviewCard.classList.add("hidden");
+    return;
+  }
+
+  reviewHeader.textContent = `今日待复习：${state.review.items.length} 个`;
+  reviewCard.classList.remove("hidden");
+  reviewFeedback.classList.add("hidden");
+  reviewFeedback.textContent = "";
+  renderReviewQuestion();
+}
+
+function renderReviewQuestion() {
+  const item = state.review.items[state.review.currentIndex];
+  if (!item) {
+    reviewCard.classList.add("hidden");
+    return;
+  }
+
+  const question = item.question;
+  reviewProgress.textContent = `第 ${state.review.currentIndex + 1} / ${state.review.items.length} 题`;
+  reviewQuestion.textContent = `「${question.question_text}」的主要中文意思是？`;
+  reviewContext.textContent = item.context_sentence ? `上下文：${item.context_sentence}` : "";
+
+  const options = [
+    ["A", question.option_a],
+    ["B", question.option_b],
+    ["C", question.option_c],
+    ["D", question.option_d],
+  ];
+  reviewOptions.innerHTML = options
+    .map(([key, value]) => {
+      const selected = state.review.selectedOption === key;
+      const isCorrect = state.review.answered && question.correct_option === key;
+      const isIncorrect = state.review.answered && selected && question.correct_option !== key;
+      const className = ["challenge-option", isCorrect ? "correct" : "", isIncorrect ? "incorrect" : ""].filter(Boolean).join(" ");
+      return `
+        <label class="${className}">
+          <input type="radio" name="review-option" value="${key}" ${selected ? "checked" : ""} ${state.review.answered ? "disabled" : ""} />
+          <span>${key}. ${escapeHTML(value)}</span>
+        </label>
+      `;
+    })
+    .join("");
+
+  reviewOptions.querySelectorAll('input[name="review-option"]').forEach((input) => {
+    input.addEventListener("change", () => {
+      state.review.selectedOption = input.value;
+    });
+  });
+
+  submitReviewAnswerButton.disabled = state.review.answered;
+  nextReviewQuestionButton.disabled = !state.review.answered;
 }
 
 async function loadVocabularyList() {
@@ -987,6 +1128,17 @@ function escapeHTML(input) {
 
 function escapeHTMLAttribute(input) {
   return escapeHTML(input).replaceAll("\n", " ");
+}
+
+function formatDateTime(value) {
+  if (!value) {
+    return "-";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return String(value);
+  }
+  return date.toLocaleString();
 }
 
 bootstrap();

@@ -3,14 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ai-japanese-learning v0.6</title>
+    <title>ai-japanese-learning v0.7</title>
     <link rel="stylesheet" href="/assets/styles.css" />
   </head>
   <body>
     <div class="shell">
       <aside class="sidebar">
         <h1>AI 日语学习</h1>
-        <p class="muted">ai-japanese-learning · v0.6</p>
+        <p class="muted">ai-japanese-learning · v0.7</p>
         <nav>
           <button data-view="login">登录</button>
           <button data-view="register">注册</button>
@@ -22,6 +22,7 @@
           <button data-view="challenge">挑战阅读</button>
           <button data-view="post-quiz">阅读后测验</button>
           <button data-view="vocabulary">生词本</button>
+          <button data-view="review">词汇复习</button>
           <button data-view="profile">个人中心</button>
         </nav>
       </aside>
@@ -178,6 +179,22 @@
                 <button id="open-vocabulary-article-button" class="secondary">打开来源文章</button>
                 <button id="delete-vocabulary-button">删除</button>
               </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel view" id="view-review">
+          <h2>词汇复习</h2>
+          <div id="review-header" class="summary">加载今日待复习生词。</div>
+          <div id="review-card" class="challenge-card hidden">
+            <div id="review-progress" class="muted">第 0 / 0 题</div>
+            <p id="review-question" class="reading-sentence challenge-sentence">题目加载中。</p>
+            <p id="review-context" class="muted"></p>
+            <div id="review-options" class="challenge-options"></div>
+            <div id="review-feedback" class="summary hidden"></div>
+            <div class="detail-actions">
+              <button id="submit-review-answer-button">提交答案</button>
+              <button id="next-review-question-button" class="secondary">下一题</button>
             </div>
           </div>
         </section>

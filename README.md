@@ -1,6 +1,6 @@
-# ai-japanese-learning v0.6
+# ai-japanese-learning v0.7
 
-当前版本已经从 `v0.5` 推进到 `v0.6`，实现了阅读后测验模式主流程。
+当前版本已经从 `v0.6` 推进到 `v0.7`，实现了基于生词本的词汇复习与记忆曲线主流程。
 
 已完成：
 
@@ -31,6 +31,12 @@
 - 阅读后测验题查询接口 `GET /api/reading/articles/{id}/post-quiz`
 - 阅读后测验题缓存入库，与挑战阅读题按 `question_type` 隔离
 - 阅读后测验页面、进度展示、正误反馈、下一题流程
+- 今日待复习生词接口 `GET /api/review/due`
+- 词汇复习题生成接口 `POST /api/review/questions`
+- 词汇复习答题接口 `POST /api/review/answer`
+- 词汇复习题缓存入库与复习记录保存
+- 根据答题结果更新生词状态、熟练度、答对/答错次数、连续答对次数和下次复习时间
+- 词汇复习页面、上下文展示、进度展示、正误反馈、下一题流程
 - 静态前端页面：登录、注册、首页、个人中心、文章上传、文章详情、阅读模式、查词弹窗
 
 ## 版本记录
@@ -59,6 +65,12 @@
   - 支持四选一测验、答题记录保存、答案解析展示。
   - 挑战阅读题和阅读后测验题按 `question_type` 分开缓存，互不覆盖。
   - 前端新增阅读后测验页面，支持进度、提交答案和下一题。
+- `v0.7`
+  - 查询用户生词本中到期的待复习生词。
+  - 基于词典 `primary_meaning_zh` 生成词汇复习四选一题，并缓存到数据库。
+  - 支持复习答题记录保存。
+  - 根据简单记忆曲线更新生词状态、熟练度和下次复习时间。
+  - 前端新增词汇复习页面，支持上下文、进度、提交答案和下一题。
 
 后续每次功能或结构改动，都需要同步更新 `README.md` 的版本记录和当前说明。
 
@@ -127,6 +139,7 @@ psql -U postgres -d japanese_learning -f migrations/002_articles_v02.sql
 psql -U postgres -d japanese_learning -f migrations/003_challenge_reading_v05.sql
 psql -U postgres -d japanese_learning -f migrations/004_challenge_metadata_v05_fix.sql
 psql -U postgres -d japanese_learning -f migrations/005_post_reading_quiz_v06.sql
+psql -U postgres -d japanese_learning -f migrations/006_vocabulary_review_v07.sql
 psql -U postgres -d japanese_learning -f seeds/001_seed.sql
 ```
 
@@ -137,6 +150,7 @@ psql -U postgres -d japanese_learning -f migrations/002_articles_v02.sql
 psql -U postgres -d japanese_learning -f migrations/003_challenge_reading_v05.sql
 psql -U postgres -d japanese_learning -f migrations/004_challenge_metadata_v05_fix.sql
 psql -U postgres -d japanese_learning -f migrations/005_post_reading_quiz_v06.sql
+psql -U postgres -d japanese_learning -f migrations/006_vocabulary_review_v07.sql
 ```
 
 ## 运行
@@ -172,6 +186,7 @@ http://localhost:8080
 - `v0.4` 的上下文例句目前来自查词时所在句子或就近半句，保存在生词本的 `source_sentence_text` 中，供后续复习和详情展示使用。
 - `v0.5` 的挑战题生成和干扰项目前仍是占位算法实现，用于先打通挑战阅读与题目缓存流程。后续接入真实 AI 后，主要替换 `internal/service/challenge_service.go`。
 - `v0.6` 的阅读后测验题目前复用占位题目生成逻辑，优先围绕文章句子中可匹配或可生成的词条出中文释义选择题。后续接入真实 AI 后，继续替换 `internal/service/challenge_service.go` 中的 post quiz 生成逻辑。
+- `v0.7` 的词汇复习题目前复用占位干扰项生成逻辑，正确答案来自词典 `primary_meaning_zh`。后续接入真实 AI 后，主要替换 `internal/service/review_service.go` 中的复习题生成逻辑。
 
 ## v0.5 Review 记录
 
@@ -210,3 +225,15 @@ http://localhost:8080
 - `GET /api/reading/articles/{id}/post-quiz` 可基于内置文章生成 `post_reading_quiz` 题目。
 - `POST /api/reading/questions/{id}/answer` 可提交阅读后测验答案并保存答题记录。
 - 本地 HTTP 烟测中，内置文章 `朝の散歩` 生成 2 道阅读后测验题，提交正确答案返回 `is_correct = true`。
+
+## v0.7 验证记录
+
+本轮实现词汇复习模式，新增复习题缓存表和复习记录表，并复用 `user_vocabulary` 中已有的复习字段更新记忆曲线。
+
+已验证：
+
+- `go test ./...` 通过。
+- 本地 PostgreSQL 已执行 `migrations/006_vocabulary_review_v07.sql`。
+- `GET /api/review/due` 可返回用户到期待复习生词和缓存复习题。
+- `POST /api/review/answer` 可提交复习答案、保存复习记录并更新生词复习字段。
+- 本地 HTTP 烟测中，测试用户添加 `散歩` 到生词本后生成 1 道复习题，提交正确答案返回 `is_correct = true`、`status = learning`、`consecutive_correct_count = 1`。
