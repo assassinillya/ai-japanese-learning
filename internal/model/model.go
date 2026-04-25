@@ -203,3 +203,28 @@ type VocabularyReviewRecord struct {
 	IsCorrect        bool      `json:"is_correct"`
 	ReviewedAt       time.Time `json:"reviewed_at"`
 }
+
+type AICacheEntry struct {
+	ID            int64     `json:"id"`
+	CacheKey      string    `json:"cache_key"`
+	TaskType      string    `json:"task_type"`
+	InputHash     string    `json:"input_hash"`
+	RequestJSON   string    `json:"request_json"`
+	ResponseJSON  string    `json:"response_json"`
+	ModelName     string    `json:"model_name"`
+	PromptVersion string    `json:"prompt_version"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+type AILog struct {
+	ID            int64     `json:"id"`
+	TaskType      string    `json:"task_type"`
+	RequestJSON   string    `json:"request_json"`
+	ResponseJSON  *string   `json:"response_json,omitempty"`
+	Status        string    `json:"status"`
+	ErrorMessage  *string   `json:"error_message,omitempty"`
+	ModelName     string    `json:"model_name"`
+	PromptVersion string    `json:"prompt_version"`
+	CreatedAt     time.Time `json:"created_at"`
+}
