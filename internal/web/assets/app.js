@@ -43,6 +43,7 @@ const globalLoading = document.getElementById("global-loading");
 const authStatus = document.getElementById("auth-status");
 const homeGreeting = document.getElementById("home-greeting");
 const profileSummary = document.getElementById("profile-summary");
+const learningStats = document.getElementById("learning-stats");
 const libraryList = document.getElementById("library-list");
 const articleList = document.getElementById("article-list");
 const articleDetail = document.getElementById("article-detail");
@@ -93,6 +94,7 @@ const submitReviewAnswerButton = document.getElementById("submit-review-answer-b
 const nextReviewQuestionButton = document.getElementById("next-review-question-button");
 const loadPostQuizResultsButton = document.getElementById("load-post-quiz-results-button");
 const loadReviewRecordsButton = document.getElementById("load-review-records-button");
+const completeOnboardingButton = document.getElementById("complete-onboarding-button");
 const reprocessButton = document.getElementById("reprocess-button");
 
 document.querySelectorAll("[data-view]").forEach((button) => {
@@ -102,6 +104,9 @@ document.querySelectorAll("[data-view]").forEach((button) => {
       setMessage("请先登录或注册");
       showView("login");
       return;
+    }
+    if (view === "stats" && state.user) {
+      await loadLearningStats();
     }
     if (view === "vocabulary" && state.user) {
       await loadVocabularyList();
@@ -114,6 +119,19 @@ document.querySelectorAll("[data-view]").forEach((button) => {
     }
     showView(view);
   });
+});
+
+completeOnboardingButton.addEventListener("click", async () => {
+  const result = await request("/api/profile/onboarding/complete", {
+    method: "POST",
+    loadingMessage: "正在完成新手引导...",
+  });
+  if (!result.ok) {
+    return;
+  }
+  state.user = result.data;
+  renderUser();
+  setMessage("新手引导已完成");
 });
 
 document.getElementById("register-form").addEventListener("submit", async (event) => {
@@ -525,6 +543,7 @@ function renderUser() {
     authStatus.textContent = "未登录";
     homeGreeting.textContent = "登录后可查看文章库、上传文章并进入处理流程。";
     profileSummary.textContent = "尚未加载资料。";
+    learningStats.textContent = "请先登录后查看学习统计。";
     libraryList.innerHTML = "";
     articleList.innerHTML = "";
     articleDetail.textContent = "请选择一篇文章。";
@@ -559,7 +578,7 @@ function renderUser() {
   if (!state.selectedVocabularyId) {
     openVocabularyArticleButton.disabled = true;
   }
-  showView("home");
+  showView(state.user.onboarding_completed ? "home" : "onboarding");
 }
 
 function handleAuthResult(result, successMessage) {
@@ -580,6 +599,31 @@ async function loadLearningRecords() {
   if (state.selectedArticleId) {
     await loadPostQuizResults();
   }
+}
+
+async function loadLearningStats() {
+  learningStats.textContent = "正在加载学习统计。";
+  const result = await request("/api/stats/learning");
+  if (!result.ok) {
+    return;
+  }
+
+  const stats = result.data;
+  const statusCounts = stats.vocabulary_status_counts || {};
+  learningStats.textContent = [
+    `我的文章：${stats.article_count}`,
+    `生词总数：${stats.vocabulary_count}`,
+    `今日待复习：${stats.due_vocabulary_count}`,
+    `阅读答题：${stats.reading_attempt_count} 次（正确 ${stats.reading_correct_count} / 错误 ${stats.reading_wrong_count}）`,
+    `词汇复习：${stats.review_record_count} 次（正确 ${stats.review_correct_count} / 错误 ${stats.review_wrong_count}）`,
+    "",
+    "生词状态：",
+    `new：${statusCounts.new || 0}`,
+    `learning：${statusCounts.learning || 0}`,
+    `reviewing：${statusCounts.reviewing || 0}`,
+    `mastered：${statusCounts.mastered || 0}`,
+    `ignored：${statusCounts.ignored || 0}`,
+  ].join("\n");
 }
 
 async function loadPostQuizResults() {

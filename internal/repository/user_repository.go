@@ -35,14 +35,14 @@ func (r *UserRepository) CreateUser(ctx context.Context, email, username, passwo
 
 	profileQuery := `
 		INSERT INTO user_profiles (user_id, jlpt_level, onboarding_completed)
-		VALUES ($1, $2, TRUE)
+		VALUES ($1, $2, FALSE)
 	`
 	if _, err := r.db.ExecContext(ctx, profileQuery, user.ID, level); err != nil {
 		return nil, fmt.Errorf("insert profile: %w", err)
 	}
 
 	user.JLPTLevel = level
-	user.OnboardingCompleted = true
+	user.OnboardingCompleted = false
 	return &user, nil
 }
 
@@ -190,6 +190,32 @@ func (r *UserRepository) TouchLastLogin(ctx context.Context, userID int64) error
 	`, userID)
 	if err != nil {
 		return fmt.Errorf("touch last login: %w", err)
+	}
+	return nil
+}
+
+func (r *UserRepository) CompleteOnboarding(ctx context.Context, userID int64) error {
+	result, err := r.db.ExecContext(ctx, `
+		UPDATE user_profiles
+		SET onboarding_completed = TRUE,
+		    updated_at = NOW()
+		WHERE user_id = $1
+	`, userID)
+	if err != nil {
+		return fmt.Errorf("complete onboarding: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("complete onboarding rows: %w", err)
+	}
+	if rows == 0 {
+		_, err = r.db.ExecContext(ctx, `
+			INSERT INTO user_profiles (user_id, jlpt_level, onboarding_completed)
+			VALUES ($1, 'N5', TRUE)
+		`, userID)
+		if err != nil {
+			return fmt.Errorf("insert profile during onboarding completion: %w", err)
+		}
 	}
 	return nil
 }

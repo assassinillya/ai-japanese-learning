@@ -242,3 +242,16 @@ type AILog struct {
 	PromptVersion string    `json:"prompt_version"`
 	CreatedAt     time.Time `json:"created_at"`
 }
+
+type LearningStats struct {
+	ArticleCount           int64            `json:"article_count"`
+	VocabularyCount        int64            `json:"vocabulary_count"`
+	DueVocabularyCount     int64            `json:"due_vocabulary_count"`
+	ReviewRecordCount      int64            `json:"review_record_count"`
+	ReadingAttemptCount    int64            `json:"reading_attempt_count"`
+	VocabularyStatusCounts map[string]int64 `json:"vocabulary_status_counts"`
+	ReadingCorrectCount    int64            `json:"reading_correct_count"`
+	ReadingWrongCount      int64            `json:"reading_wrong_count"`
+	ReviewCorrectCount     int64            `json:"review_correct_count"`
+	ReviewWrongCount       int64            `json:"review_wrong_count"`
+}

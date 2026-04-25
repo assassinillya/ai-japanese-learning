@@ -24,6 +24,7 @@ type Router struct {
 	vocabularyService *service.VocabularyService
 	challengeService  *service.ChallengeService
 	reviewService     *service.ReviewService
+	statsService      *service.StatsService
 }
 
 type staticServer interface {
@@ -38,6 +39,7 @@ func NewRouter(
 	vocabularyService *service.VocabularyService,
 	challengeService *service.ChallengeService,
 	reviewService *service.ReviewService,
+	statsService *service.StatsService,
 	static staticServer,
 ) *Router {
 	r := &Router{
@@ -49,6 +51,7 @@ func NewRouter(
 		vocabularyService: vocabularyService,
 		challengeService:  challengeService,
 		reviewService:     reviewService,
+		statsService:      statsService,
 	}
 
 	r.mux.Handle("/assets/", http.StripPrefix("/assets/", static.Handler()))
@@ -61,6 +64,7 @@ func NewRouter(
 	r.mux.HandleFunc("GET /api/auth/me", r.withAuth(r.handleMe))
 	r.mux.HandleFunc("GET /api/profile", r.withAuth(r.handleProfile))
 	r.mux.HandleFunc("PUT /api/profile/jlpt-level", r.withAuth(r.handleUpdateJLPTLevel))
+	r.mux.HandleFunc("POST /api/profile/onboarding/complete", r.withAuth(r.handleCompleteOnboarding))
 	r.mux.HandleFunc("GET /api/articles/library", r.withAuth(r.handleLibraryArticles))
 	r.mux.HandleFunc("GET /api/articles", r.withAuth(r.handleMyArticles))
 	r.mux.HandleFunc("POST /api/articles", r.withAuth(r.handleCreateArticle))
@@ -89,6 +93,7 @@ func NewRouter(
 	r.mux.HandleFunc("POST /api/review/questions", r.withAuth(r.handleReviewQuestions))
 	r.mux.HandleFunc("POST /api/review/answer", r.withAuth(r.handleReviewAnswer))
 	r.mux.HandleFunc("GET /api/review/records", r.withAuth(r.handleReviewRecords))
+	r.mux.HandleFunc("GET /api/stats/learning", r.withAuth(r.handleLearningStats))
 
 	return r
 }
@@ -96,7 +101,7 @@ func NewRouter(
 func (r *Router) handleHealth(w http.ResponseWriter, req *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{
 		"status":  "ok",
-		"version": "v1.0",
+		"version": "v1.1",
 	})
 }
 

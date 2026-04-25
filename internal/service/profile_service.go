@@ -26,3 +26,7 @@ func (s *ProfileService) UpdateJLPTLevel(ctx context.Context, userID int64, leve
 	}
 	return s.userRepo.UpdateJLPTLevel(ctx, userID, level)
 }
+
+func (s *ProfileService) CompleteOnboarding(ctx context.Context, userID int64) error {
+	return s.userRepo.CompleteOnboarding(ctx, userID)
+}

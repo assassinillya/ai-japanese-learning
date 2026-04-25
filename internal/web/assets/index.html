@@ -3,17 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ai-japanese-learning v1.0</title>
+    <title>ai-japanese-learning v1.1</title>
     <link rel="stylesheet" href="/assets/styles.css" />
   </head>
   <body>
     <div class="shell">
       <aside class="sidebar">
         <h1>AI 日语学习</h1>
-        <p class="muted">ai-japanese-learning · v1.0</p>
+        <p class="muted">ai-japanese-learning · v1.1</p>
         <nav>
           <button data-view="login">登录</button>
           <button data-view="register">注册</button>
+          <button data-view="onboarding">新手引导</button>
           <button data-view="home">首页</button>
           <button data-view="articles">我的文章</button>
           <button data-view="upload">上传文章</button>
@@ -24,6 +25,7 @@
           <button data-view="vocabulary">生词本</button>
           <button data-view="review">词汇复习</button>
           <button data-view="records">学习记录</button>
+          <button data-view="stats">统计概览</button>
           <button data-view="profile">个人中心</button>
         </nav>
       </aside>
@@ -78,6 +80,22 @@
               <p class="muted">点击文章标题可直接进入详情和阅读准备页面。</p>
               <ul id="library-list" class="list"></ul>
             </div>
+          </div>
+        </section>
+
+        <section class="panel view" id="view-onboarding">
+          <h2>新手引导</h2>
+          <div class="summary">
+            1. 选择或确认 JLPT 等级。
+            2. 从内置文章库选择文章，或上传自己的文章。
+            3. 进入阅读模式，框选日语词语查看释义。
+            4. 将生词加入生词本。
+            5. 进入词汇复习，完成选择题并更新记忆曲线。
+          </div>
+          <div class="detail-actions">
+            <button id="complete-onboarding-button">完成引导</button>
+            <button class="secondary" data-view="upload">去上传文章</button>
+            <button class="secondary" data-view="home">看内置文章</button>
           </div>
         </section>
 
@@ -217,6 +235,11 @@
               <ul id="review-records-list" class="list"></ul>
             </div>
           </div>
+        </section>
+
+        <section class="panel view" id="view-stats">
+          <h2>统计概览</h2>
+          <div id="learning-stats" class="summary">正在加载学习统计。</div>
         </section>
 
         <section class="panel view" id="view-profile">

@@ -53,3 +53,23 @@ func (r *Router) handleUpdateJLPTLevel(w http.ResponseWriter, req *http.Request)
 
 	writeJSON(w, http.StatusOK, profile)
 }
+
+func (r *Router) handleCompleteOnboarding(w http.ResponseWriter, req *http.Request) {
+	user, err := currentUser(req.Context())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	if err := r.profileService.CompleteOnboarding(req.Context(), user.ID); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	profile, err := r.profileService.GetProfile(req.Context(), user.ID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, profile)
+}

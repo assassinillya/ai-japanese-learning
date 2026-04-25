@@ -29,6 +29,7 @@ func New(cfg *config.Config) (*App, error) {
 	challengeRepo := repository.NewChallengeRepository(postgres)
 	reviewRepo := repository.NewReviewRepository(postgres)
 	aiRepo := repository.NewAIRepository(postgres)
+	statsRepo := repository.NewStatsRepository(postgres)
 	authService := service.NewAuthService(userRepo, cfg.TokenSecret)
 	profileService := service.NewProfileService(userRepo)
 	languageService := service.NewLanguageService()
@@ -39,6 +40,7 @@ func New(cfg *config.Config) (*App, error) {
 	vocabularyService := service.NewVocabularyService(vocabularyRepo, dictionaryRepo, articleRepo)
 	challengeService := service.NewChallengeService(articleRepo, dictionaryRepo, challengeRepo, dictionaryService, aiService)
 	reviewService := service.NewReviewService(vocabularyRepo, dictionaryRepo, reviewRepo, aiService)
+	statsService := service.NewStatsService(statsRepo)
 
 	router := handler.NewRouter(
 		authService,
@@ -48,6 +50,7 @@ func New(cfg *config.Config) (*App, error) {
 		vocabularyService,
 		challengeService,
 		reviewService,
+		statsService,
 		web.NewStaticServer(),
 	)
 
