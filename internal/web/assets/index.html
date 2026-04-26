@@ -17,15 +17,14 @@
           </div>
         </div>
         <nav class="sidebar-nav" aria-label="主导航">
-          <button class="nav-item" data-view="home"><span>⌂</span>首页</button>
-          <button class="nav-item" data-view="articles"><span>□</span>我的文章</button>
-          <button class="nav-item" data-view="upload"><span>＋</span>上传文章</button>
-          <button class="nav-item" data-view="reading"><span>文</span>阅读模式</button>
-          <button class="nav-item" data-view="vocabulary"><span>単</span>生词本</button>
-          <button class="nav-item" data-view="review"><span>✓</span>词汇复习</button>
-          <button class="nav-item" data-view="records"><span>◷</span>学习记录</button>
-          <button class="nav-item" data-view="stats"><span>▣</span>统计概览</button>
-          <button class="nav-item" data-view="profile"><span>人</span>个人中心</button>
+          <button class="nav-item" data-view="home"><span>🏠</span>首页</button>
+          <button class="nav-item" data-view="articles"><span>📖</span>我的文章</button>
+          <button class="nav-item" data-view="upload"><span>📝</span>上传文章</button>
+          <button class="nav-item" data-view="vocabulary"><span>📚</span>生词本</button>
+          <button class="nav-item" data-view="review"><span>🎯</span>词汇复习</button>
+          <button class="nav-item" data-view="records"><span>🕘</span>学习记录</button>
+          <button class="nav-item" data-view="stats"><span>📊</span>统计概览</button>
+          <button class="nav-item" data-view="profile"><span>👤</span>个人中心</button>
         </nav>
         <div class="sidebar-footer">
           <div id="auth-status">未登录</div>
@@ -44,6 +43,18 @@
             <p class="page-subtitle">阅读、查词、生词复习和学习统计集中在一个工作台。</p>
           </div>
           <div id="global-loading" class="loading-indicator hidden"><span class="loading-spinner"></span>处理中</div>
+        </section>
+        <section id="question-generation-panel" class="generation-panel hidden">
+          <div class="generation-row">
+            <span>挑战阅读题</span>
+            <div class="progress-bar compact-progress"><span id="challenge-generation-bar"></span></div>
+            <strong id="challenge-generation-status">等待生成</strong>
+          </div>
+          <div class="generation-row">
+            <span>阅读后测验</span>
+            <div class="progress-bar compact-progress"><span id="post-quiz-generation-bar"></span></div>
+            <strong id="post-quiz-generation-status">等待生成</strong>
+          </div>
         </section>
 
         <section class="auth-view view active" id="view-login">
@@ -270,11 +281,11 @@
                   状态筛选
                   <select class="input" name="status">
                     <option value="">全部</option>
-                    <option value="new">new</option>
-                    <option value="learning">learning</option>
-                    <option value="reviewing">reviewing</option>
-                    <option value="mastered">mastered</option>
-                    <option value="ignored">ignored</option>
+                    <option value="new">新词</option>
+                    <option value="learning">学习中</option>
+                    <option value="reviewing">复习中</option>
+                    <option value="mastered">熟练</option>
+                    <option value="ignored">忽略</option>
                   </select>
                 </label>
                 <button class="btn btn-secondary" type="submit">筛选</button>
@@ -288,7 +299,7 @@
               </div>
               <ul id="vocabulary-list" class="list vocabulary-list"></ul>
             </div>
-            <div class="card">
+            <div class="card vocabulary-detail-card">
               <div id="vocabulary-detail" class="summary">请选择一个生词查看详情。</div>
               <div class="detail-actions">
                 <button class="btn btn-secondary" data-vocabulary-status="new">新词</button>
@@ -325,7 +336,7 @@
 
         <section class="view" id="view-records">
           <header class="page-header"><div><h2 class="page-title">学习记录</h2><p class="page-subtitle">查看最近测验和复习结果。</p></div></header>
-          <div class="detail-actions toolbar">
+          <div class="detail-actions toolbar records-toolbar">
             <button id="load-post-quiz-results-button" class="btn btn-secondary">当前文章测验记录</button>
             <button id="load-review-records-button" class="btn btn-secondary">词汇复习记录</button>
           </div>

@@ -1,12 +1,14 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"ai-japanese-learning/internal/model"
+	"ai-japanese-learning/internal/service"
 )
 
 type createVocabularyRequest struct {
@@ -81,6 +83,15 @@ func (r *Router) handleCreateVocabulary(w http.ResponseWriter, req *http.Request
 		"item":    item,
 		"created": created,
 	})
+	if created {
+		go func(ctx context.Context, entryID int64) {
+			entry, err := r.dictionaryService.GetByID(ctx, entryID)
+			if err != nil {
+				return
+			}
+			_, _ = r.reviewService.GetOrCreateQuestion(ctx, *entry)
+		}(service.BackgroundContextWithAIProvider(req.Context()), input.DictionaryEntryID)
+	}
 }
 
 func (r *Router) handleVocabularyCheck(w http.ResponseWriter, req *http.Request) {

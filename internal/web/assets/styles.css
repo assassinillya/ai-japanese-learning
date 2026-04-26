@@ -501,6 +501,7 @@ label {
 }
 
 .reading-page {
+  --reading-shell-width: 1128px;
   max-width: 1220px;
   margin: 0 auto;
 }
@@ -520,6 +521,9 @@ label {
   background: rgba(255, 255, 255, 0.9);
   box-shadow: var(--shadow-soft);
   backdrop-filter: blur(14px);
+  width: min(100%, var(--reading-shell-width));
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .reading-title {
@@ -535,6 +539,9 @@ label {
   grid-template-columns: minmax(0, 880px) 230px;
   justify-content: center;
   gap: 18px;
+  width: min(100%, var(--reading-shell-width));
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .reading-container, .reading-content {
@@ -591,6 +598,38 @@ label {
   background: rgba(255, 255, 255, 0.9);
   box-shadow: var(--shadow-card);
   text-align: center;
+}
+
+.generation-panel {
+  max-width: 1180px;
+  margin: 0 auto 18px;
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid rgba(99, 102, 241, 0.16);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: var(--shadow-soft);
+}
+
+.generation-row {
+  display: grid;
+  grid-template-columns: 100px minmax(120px, 1fr) 110px;
+  align-items: center;
+  gap: 12px;
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
+.generation-row strong {
+  color: var(--color-text);
+  font-size: 12px;
+  text-align: right;
+}
+
+.compact-progress {
+  height: 7px;
+  margin: 0;
 }
 
 .progress-label {
@@ -652,6 +691,44 @@ label {
 .challenge-option.incorrect {
   border-color: rgba(239, 68, 68, 0.7);
   background: #fef2f2;
+}
+
+.review-option {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  justify-items: center;
+  min-height: 64px;
+  padding: 14px 18px;
+  text-align: center;
+}
+
+.review-option input {
+  display: none;
+}
+
+.review-option.selected {
+  border-color: rgba(99, 102, 241, 0.75);
+  background: #eef2ff;
+  box-shadow: var(--shadow-soft);
+}
+
+.review-option .option-key {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  color: white;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
+  font-weight: 850;
+}
+
+.review-option .option-value {
+  width: 100%;
+  color: var(--color-text);
+  font-weight: 760;
+  line-height: 1.5;
 }
 
 .review-page {
@@ -747,6 +824,9 @@ label {
 }
 
 .vocabulary-item {
+  justify-items: start;
+  justify-content: stretch;
+  text-align: left;
   gap: 5px;
   padding: 10px 12px;
 }
@@ -756,6 +836,8 @@ label {
   grid-template-columns: minmax(120px, 1fr) auto;
   align-items: center;
   gap: 8px;
+  justify-items: start;
+  width: 100%;
 }
 
 .vocabulary-item .meta {
@@ -763,7 +845,44 @@ label {
 }
 
 .vocabulary-item span {
+  text-align: left;
   line-height: 1.45;
+}
+
+.vocabulary-item .vocab-surface {
+  display: block;
+  text-align: left;
+}
+
+.vocabulary-detail-card {
+  padding: 14px 16px;
+}
+
+.vocabulary-detail-card #vocabulary-detail {
+  display: grid;
+  gap: 4px;
+  line-height: 1.35;
+  text-align: left;
+}
+
+.vocabulary-detail-card #vocabulary-detail .vocab-surface {
+  margin: 0;
+  line-height: 1.2;
+  text-align: left;
+}
+
+.vocabulary-detail-card #vocabulary-detail p {
+  margin: 2px 0;
+}
+
+.vocabulary-detail-card #vocabulary-detail .meta {
+  line-height: 1.35;
+}
+
+#view-records .records-toolbar {
+  max-width: 1180px;
+  margin: 0 auto 18px;
+  justify-content: flex-start;
 }
 
 .dictionary-examples-panel {

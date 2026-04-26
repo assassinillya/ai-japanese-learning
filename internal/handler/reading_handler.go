@@ -71,7 +71,7 @@ func (r *Router) handleListChallengeQuestions(w http.ResponseWriter, req *http.R
 		return
 	}
 
-	questions, err := r.challengeService.GetOrGenerate(req.Context(), user.ID, articleID)
+	questions, err := r.challengeService.ListExisting(req.Context(), user.ID, articleID)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
@@ -113,7 +113,7 @@ func (r *Router) handleListPostQuiz(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	questions, err := r.challengeService.GetOrGeneratePostQuiz(req.Context(), user.ID, articleID)
+	questions, err := r.challengeService.ListExistingPostQuiz(req.Context(), user.ID, articleID)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return

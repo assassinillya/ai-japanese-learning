@@ -38,6 +38,20 @@ func (r *Router) handleReviewQuestions(w http.ResponseWriter, req *http.Request)
 	r.handleReviewDue(w, req)
 }
 
+func (r *Router) handleReviewPrewarm(w http.ResponseWriter, req *http.Request) {
+	user, err := currentUser(req.Context())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	created, err := r.reviewService.EnsureQuestionsForUser(req.Context(), user.ID)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"created": created})
+}
+
 func (r *Router) handleReviewRecords(w http.ResponseWriter, req *http.Request) {
 	user, err := currentUser(req.Context())
 	if err != nil {

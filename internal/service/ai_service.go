@@ -34,6 +34,13 @@ func aiProviderConfigFromContext(ctx context.Context) (AIProviderConfig, bool) {
 	return cfg, ok
 }
 
+func BackgroundContextWithAIProvider(ctx context.Context) context.Context {
+	if cfg, ok := aiProviderConfigFromContext(ctx); ok {
+		return ContextWithAIProviderConfig(context.Background(), cfg)
+	}
+	return context.Background()
+}
+
 func NewAIService(aiRepo *repository.AIRepository, provider AIProvider) *AIService {
 	return &AIService{
 		aiRepo:   aiRepo,

@@ -60,6 +60,29 @@ func (s *ReviewService) Due(ctx context.Context, userID int64, limit int) ([]mod
 	return items, nil
 }
 
+func (s *ReviewService) EnsureQuestionsForUser(ctx context.Context, userID int64) (int, error) {
+	details, err := s.vocabularyRepo.ListByUser(ctx, userID, "")
+	if err != nil {
+		return 0, err
+	}
+	created := 0
+	for _, detail := range details {
+		if detail.Item.Status == model.VocabularyIgnored || detail.Item.Status == model.VocabularyMastered {
+			continue
+		}
+		if _, err := s.reviewRepo.GetQuestionByDictionaryEntry(ctx, detail.DictionaryEntry.ID); err == nil {
+			continue
+		} else if err != repository.ErrReviewQuestionNotFound {
+			return created, err
+		}
+		if _, err := s.GetOrCreateQuestion(ctx, detail.DictionaryEntry); err != nil {
+			return created, err
+		}
+		created++
+	}
+	return created, nil
+}
+
 func (s *ReviewService) GetOrCreateQuestion(ctx context.Context, entry model.DictionaryEntry) (*model.VocabularyReviewQuestion, error) {
 	existing, err := s.reviewRepo.GetQuestionByDictionaryEntry(ctx, entry.ID)
 	if err == nil {

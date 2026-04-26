@@ -48,6 +48,7 @@ func (r *Router) handleAIConfigUpdate(w http.ResponseWriter, req *http.Request) 
 	if !ok {
 		return
 	}
+	cfg = r.mergeStoredAIConfig(req, cfg)
 	status := r.aiService.StatusForConfig(cfg)
 	if r.userAIConfigRepo != nil {
 		user, err := currentUser(req.Context())
@@ -94,6 +95,7 @@ func (r *Router) handleAIModels(w http.ResponseWriter, req *http.Request) {
 	if !ok {
 		return
 	}
+	cfg = r.mergeStoredAIConfig(req, cfg)
 	models, status, err := r.aiService.ListProviderModels(req.Context(), cfg)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{
@@ -113,6 +115,7 @@ func (r *Router) handleAICheck(w http.ResponseWriter, req *http.Request) {
 	if !ok {
 		return
 	}
+	cfg = r.mergeStoredAIConfig(req, cfg)
 	status, err := r.aiService.CheckProvider(req.Context(), cfg)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{
@@ -127,6 +130,22 @@ func (r *Router) handleAICheck(w http.ResponseWriter, req *http.Request) {
 		"status":  status,
 		"message": "AI provider connection check passed",
 	})
+}
+
+func (r *Router) mergeStoredAIConfig(req *http.Request, cfg service.AIProviderConfig) service.AIProviderConfig {
+	if cfg.APIKey != "" || r.userAIConfigRepo == nil {
+		return cfg
+	}
+	user, err := currentUser(req.Context())
+	if err != nil {
+		return cfg
+	}
+	stored, err := r.userAIConfigRepo.Get(req.Context(), user.ID)
+	if err != nil {
+		return cfg
+	}
+	cfg.APIKey = stored.APIKey
+	return cfg
 }
 
 func (r *Router) decodeAIConfig(w http.ResponseWriter, req *http.Request) (service.AIProviderConfig, bool) {

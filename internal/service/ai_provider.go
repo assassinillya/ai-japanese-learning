@@ -53,6 +53,7 @@ type AIProviderStatus struct {
 	BaseURL        string   `json:"base_url"`
 	Model          string   `json:"model"`
 	APIVersion     string   `json:"api_version,omitempty"`
+	APIKeySaved    bool     `json:"api_key_saved"`
 	Configured     bool     `json:"configured"`
 	Endpoint       string   `json:"endpoint"`
 	ModelsEndpoint string   `json:"models_endpoint"`
@@ -138,6 +139,7 @@ func SanitizedAIProviderStatus(cfg AIProviderConfig, provider AIProvider) AIProv
 		BaseURL:        cfg.BaseURL,
 		Model:          cfg.Model,
 		APIVersion:     cfg.APIVersion,
+		APIKeySaved:    strings.TrimSpace(cfg.APIKey) != "",
 		Configured:     provider != nil,
 		Endpoint:       providerEndpoint(cfg),
 		ModelsEndpoint: providerModelsEndpoint(cfg),

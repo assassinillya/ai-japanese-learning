@@ -61,6 +61,20 @@ func (s *ChallengeService) GetOrGenerate(ctx context.Context, userID, articleID 
 	return s.Generate(ctx, userID, articleID)
 }
 
+func (s *ChallengeService) ListExisting(ctx context.Context, userID, articleID int64) ([]model.ChallengeQuestion, error) {
+	if _, err := s.articleRepo.GetAccessible(ctx, userID, articleID); err != nil {
+		return nil, err
+	}
+	existing, err := s.challengeRepo.ListByArticleAndType(ctx, articleID, QuestionTypeChallengeReading)
+	if err != nil {
+		return nil, err
+	}
+	if containsPlaceholderQuestions(existing) {
+		return []model.ChallengeQuestion{}, nil
+	}
+	return existing, nil
+}
+
 func (s *ChallengeService) Generate(ctx context.Context, userID, articleID int64) ([]model.ChallengeQuestion, error) {
 	article, err := s.articleRepo.GetAccessible(ctx, userID, articleID)
 	if err != nil {
@@ -118,6 +132,20 @@ func (s *ChallengeService) GetOrGeneratePostQuiz(ctx context.Context, userID, ar
 	}
 
 	return s.GeneratePostQuiz(ctx, userID, articleID)
+}
+
+func (s *ChallengeService) ListExistingPostQuiz(ctx context.Context, userID, articleID int64) ([]model.ChallengeQuestion, error) {
+	if _, err := s.articleRepo.GetAccessible(ctx, userID, articleID); err != nil {
+		return nil, err
+	}
+	existing, err := s.challengeRepo.ListByArticleAndType(ctx, articleID, QuestionTypePostReadingQuiz)
+	if err != nil {
+		return nil, err
+	}
+	if containsPlaceholderQuestions(existing) {
+		return []model.ChallengeQuestion{}, nil
+	}
+	return existing, nil
 }
 
 func (s *ChallengeService) GeneratePostQuiz(ctx context.Context, userID, articleID int64) ([]model.ChallengeQuestion, error) {

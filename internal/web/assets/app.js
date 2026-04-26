@@ -38,6 +38,10 @@ const state = {
   },
   pendingRequests: 0,
   historyReady: false,
+  questionGeneration: {
+    challenge: "unknown",
+    postQuiz: "unknown",
+  },
 };
 
 const views = document.querySelectorAll(".view");
@@ -92,6 +96,13 @@ const addVocabularyButton = document.getElementById("add-vocabulary-button");
 const openReadingButton = document.getElementById("open-reading-button");
 const openChallengeButton = document.getElementById("open-challenge-button");
 const openPostQuizButton = document.getElementById("open-post-quiz-button");
+const openChallengeToolbarButton = document.getElementById("open-challenge-button-toolbar");
+const openPostQuizToolbarButton = document.getElementById("open-post-quiz-button-toolbar");
+const questionGenerationPanel = document.getElementById("question-generation-panel");
+const challengeGenerationBar = document.getElementById("challenge-generation-bar");
+const challengeGenerationStatus = document.getElementById("challenge-generation-status");
+const postQuizGenerationBar = document.getElementById("post-quiz-generation-bar");
+const postQuizGenerationStatus = document.getElementById("post-quiz-generation-status");
 const submitChallengeAnswerButton = document.getElementById("submit-challenge-answer-button");
 const nextChallengeQuestionButton = document.getElementById("next-challenge-question-button");
 const submitPostQuizAnswerButton = document.getElementById("submit-post-quiz-answer-button");
@@ -244,8 +255,13 @@ function renderAIConfig(status) {
   setAIFormValue("provider", status.provider || "openai");
   setAIFormValue("provider_name", status.provider_name || "");
   setAIFormValue("base_url", status.base_url || "");
+  setAIFormValue("api_key", "");
   setAIFormValue("api_version", status.api_version || "");
   setAIModelOptions(status.model ? [status.model] : [], status.model || "");
+  const apiKeyInput = aiConfigForm.elements.api_key;
+  if (apiKeyInput) {
+    apiKeyInput.placeholder = status.api_key_saved ? "已保存，留空则继续使用原 API Key" : "sk-...";
+  }
   aiConfigStatus.innerHTML = formatAIStatus(status, status.configured ? "当前后端 AI 已配置。" : "当前后端未启用 AI，保存配置后生效。");
 }
 
@@ -355,9 +371,11 @@ function formatAIStatus(status, message) {
   if (!status) {
     return escapeHTML(message || "-");
   }
+  const keyStatus = status.api_key_saved ? "已保存，留空保存不会覆盖" : "未保存";
   return `
     <strong>${escapeHTML(message || "-")}</strong>
     <div class="meta">供应商：${escapeHTML(status.provider_name || status.provider || "-")} · 类型：${escapeHTML(status.provider || "-")} · 模型：${escapeHTML(status.model || "-")}</div>
+    <div class="meta">API Key：${escapeHTML(keyStatus)}</div>
     <div class="meta">调用地址：${escapeHTML(status.endpoint || "-")}</div>
     <div class="meta">模型地址：${escapeHTML(status.models_endpoint || "-")}</div>
   `;
@@ -394,6 +412,7 @@ document.getElementById("article-form").addEventListener("submit", async (event)
   await Promise.all([loadArticles(), loadPublicArticles()]);
   showView("reading");
   await loadReadingArticle(result.data.id);
+  startArticleQuestionGeneration(result.data.id);
   setMessage("文章已创建并处理完成");
   event.currentTarget.reset();
 });
@@ -412,6 +431,7 @@ reprocessButton.addEventListener("click", async () => {
     return;
   }
   await Promise.all([loadArticleDetail(state.selectedArticleId), loadArticles()]);
+  startArticleQuestionGeneration(state.selectedArticleId);
   setMessage("文章已重新处理");
 });
 
@@ -429,6 +449,10 @@ openChallengeButton.addEventListener("click", async () => {
     setMessage("请先选择一篇文章");
     return;
   }
+  if (state.questionGeneration.challenge !== "ready") {
+    setMessage("挑战阅读题还没有生成完成，请等待进度条完成。");
+    return;
+  }
   showView("challenge");
   await loadChallengeQuestions(state.selectedArticleId);
 });
@@ -436,6 +460,10 @@ openChallengeButton.addEventListener("click", async () => {
 openPostQuizButton.addEventListener("click", async () => {
   if (!state.selectedArticleId) {
     setMessage("请先选择一篇文章");
+    return;
+  }
+  if (state.questionGeneration.postQuiz !== "ready") {
+    setMessage("阅读后测验还没有生成完成，请等待进度条完成。");
     return;
   }
   showView("post-quiz");
@@ -677,6 +705,10 @@ nextPostQuizQuestionButton.addEventListener("click", () => {
 });
 
 submitReviewAnswerButton.addEventListener("click", async () => {
+  await submitCurrentReviewAnswer();
+});
+
+async function submitCurrentReviewAnswer() {
   const item = state.review.items[state.review.currentIndex];
   if (!item) {
     setMessage("当前没有可作答的复习题");
@@ -716,7 +748,7 @@ submitReviewAnswerButton.addEventListener("click", async () => {
   ].join("\n");
   await loadVocabularyList();
   renderReviewQuestion();
-});
+}
 
 nextReviewQuestionButton.addEventListener("click", () => {
   moveToNextReviewQuestion();
@@ -1155,6 +1187,7 @@ async function loadArticleDetail(articleId) {
 
   reprocessButton.disabled = article.source_type === "builtin";
   reprocessButton.title = article.source_type === "builtin" ? "内置文章无需重新处理" : "";
+  await refreshQuestionGenerationReadiness(articleId);
 }
 
 async function loadReadingArticle(articleId) {
@@ -1175,10 +1208,101 @@ async function loadReadingArticle(articleId) {
   if (!readingContent.innerHTML) {
     readingContent.innerHTML = `<div class="empty-state">当前文章没有可阅读句子。</div>`;
   }
+  await refreshQuestionGenerationReadiness(articleId);
+}
+
+async function refreshQuestionGenerationReadiness(articleId) {
+  if (!articleId) {
+    return;
+  }
+  showQuestionGenerationPanel(true);
+  setQuestionGenerationStatus("challenge", "checking");
+  setQuestionGenerationStatus("postQuiz", "checking");
+  const [challengeResult, postQuizResult] = await Promise.all([
+    request(`/api/reading/articles/${articleId}/challenge-questions`, { silent: true }),
+    request(`/api/reading/articles/${articleId}/post-quiz`, { silent: true }),
+  ]);
+  setQuestionGenerationStatus("challenge", challengeResult.ok && (challengeResult.data.items || []).length > 0 ? "ready" : "pending");
+  setQuestionGenerationStatus("postQuiz", postQuizResult.ok && (postQuizResult.data.items || []).length > 0 ? "ready" : "pending");
+  hideQuestionGenerationPanelIfReady();
+}
+
+function startArticleQuestionGeneration(articleId) {
+  if (!articleId) {
+    return;
+  }
+  showQuestionGenerationPanel(true);
+  setQuestionGenerationStatus("challenge", "generating");
+  setQuestionGenerationStatus("postQuiz", "generating");
+  void generateQuestionSet(articleId, "challenge");
+  void generateQuestionSet(articleId, "postQuiz");
+}
+
+async function generateQuestionSet(articleId, type) {
+  const endpoint =
+    type === "challenge"
+      ? `/api/reading/articles/${articleId}/challenge-questions`
+      : `/api/reading/articles/${articleId}/post-quiz`;
+  const result = await request(endpoint, {
+    method: "POST",
+    timeoutMs: 120000,
+    silent: true,
+  });
+  setQuestionGenerationStatus(type, result.ok && (result.data.items || []).length > 0 ? "ready" : "failed");
+  hideQuestionGenerationPanelIfReady();
+}
+
+function showQuestionGenerationPanel(visible) {
+  questionGenerationPanel?.classList.toggle("hidden", !visible);
+}
+
+function hideQuestionGenerationPanelIfReady() {
+  if (state.questionGeneration.challenge === "ready" && state.questionGeneration.postQuiz === "ready") {
+    window.setTimeout(() => showQuestionGenerationPanel(false), 800);
+  }
+}
+
+function setQuestionGenerationStatus(type, status) {
+  state.questionGeneration[type] = status;
+  const isChallenge = type === "challenge";
+  const bar = isChallenge ? challengeGenerationBar : postQuizGenerationBar;
+  const label = isChallenge ? challengeGenerationStatus : postQuizGenerationStatus;
+  const statusMeta = {
+    checking: ["检测中", 35],
+    pending: ["未生成", 0],
+    generating: ["生成中", 65],
+    ready: ["已完成", 100],
+    failed: ["生成失败", 0],
+    unknown: ["等待生成", 0],
+  }[status] || ["等待生成", 0];
+  if (bar) {
+    bar.style.width = `${statusMeta[1]}%`;
+  }
+  if (label) {
+    label.textContent = statusMeta[0];
+  }
+  updateQuestionActionButtons();
+}
+
+function updateQuestionActionButtons() {
+  const challengeReady = state.questionGeneration.challenge === "ready";
+  const postQuizReady = state.questionGeneration.postQuiz === "ready";
+  [openChallengeButton, openChallengeToolbarButton].forEach((button) => {
+    if (button) {
+      button.disabled = !challengeReady;
+      button.title = challengeReady ? "" : "挑战阅读题生成完成后可进入";
+    }
+  });
+  [openPostQuizButton, openPostQuizToolbarButton].forEach((button) => {
+    if (button) {
+      button.disabled = !postQuizReady;
+      button.title = postQuizReady ? "" : "阅读后测验生成完成后可进入";
+    }
+  });
 }
 
 async function loadChallengeQuestions(articleId) {
-  challengeHeader.textContent = "正在生成或加载挑战阅读题...";
+  challengeHeader.textContent = "正在加载挑战阅读题...";
   challengeLoading?.classList.remove("hidden");
   challengeCard.classList.add("hidden");
   const result = await request(`/api/reading/articles/${articleId}/challenge-questions`, { timeoutMs: 60000 });
@@ -1195,7 +1319,7 @@ async function loadChallengeQuestions(articleId) {
   hideLookupPopup();
 
   if (state.challenge.questions.length === 0) {
-    challengeHeader.textContent = "当前文章还没有可用的挑战题。";
+    challengeHeader.textContent = "当前文章还没有可用的挑战题，请等待上传后的题目生成任务完成。";
     challengeCard.classList.add("hidden");
     return;
   }
@@ -1208,7 +1332,7 @@ async function loadChallengeQuestions(articleId) {
 }
 
 async function loadPostQuizQuestions(articleId) {
-  postQuizHeader.textContent = "正在生成或加载阅读后测验题...";
+  postQuizHeader.textContent = "正在加载阅读后测验题...";
   postQuizCard.classList.add("hidden");
   const result = await request(`/api/reading/articles/${articleId}/post-quiz`, { timeoutMs: 60000 });
   if (!result.ok) {
@@ -1222,7 +1346,7 @@ async function loadPostQuizQuestions(articleId) {
   hideLookupPopup();
 
   if (state.postQuiz.questions.length === 0) {
-    postQuizHeader.textContent = "当前文章还没有可用的测验题。";
+    postQuizHeader.textContent = "当前文章还没有可用的测验题，请等待上传后的题目生成任务完成。";
     postQuizCard.classList.add("hidden");
     return;
   }
@@ -1258,11 +1382,12 @@ function renderChallengeQuestion() {
       const selected = state.challenge.selectedOption === key;
       const isCorrect = state.challenge.answered && question.correct_option === key;
       const isIncorrect = state.challenge.answered && selected && question.correct_option !== key;
-      const className = ["challenge-option", isCorrect ? "correct" : "", isIncorrect ? "incorrect" : ""].filter(Boolean).join(" ");
+      const className = ["challenge-option", "review-option", selected ? "selected" : "", isCorrect ? "correct" : "", isIncorrect ? "incorrect" : ""].filter(Boolean).join(" ");
       return `
         <label class="${className}">
           <input type="radio" name="challenge-option" value="${key}" ${selected ? "checked" : ""} ${state.challenge.answered ? "disabled" : ""} />
-          <span>${key}. ${escapeHTML(value)}</span>
+          <span class="option-key">${key}</span>
+          <span class="option-value">${escapeHTML(value)}</span>
         </label>
       `;
     })
@@ -1271,6 +1396,7 @@ function renderChallengeQuestion() {
   challengeOptions.querySelectorAll('input[name="challenge-option"]').forEach((input) => {
     input.addEventListener("change", () => {
       state.challenge.selectedOption = input.value;
+      renderChallengeQuestion();
     });
   });
 
@@ -1303,11 +1429,12 @@ function renderPostQuizQuestion() {
       const selected = state.postQuiz.selectedOption === key;
       const isCorrect = state.postQuiz.answered && question.correct_option === key;
       const isIncorrect = state.postQuiz.answered && selected && question.correct_option !== key;
-      const className = ["challenge-option", isCorrect ? "correct" : "", isIncorrect ? "incorrect" : ""].filter(Boolean).join(" ");
+      const className = ["challenge-option", "review-option", selected ? "selected" : "", isCorrect ? "correct" : "", isIncorrect ? "incorrect" : ""].filter(Boolean).join(" ");
       return `
         <label class="${className}">
           <input type="radio" name="post-quiz-option" value="${key}" ${selected ? "checked" : ""} ${state.postQuiz.answered ? "disabled" : ""} />
-          <span>${key}. ${escapeHTML(value)}</span>
+          <span class="option-key">${key}</span>
+          <span class="option-value">${escapeHTML(value)}</span>
         </label>
       `;
     })
@@ -1316,6 +1443,7 @@ function renderPostQuizQuestion() {
   postQuizOptions.querySelectorAll('input[name="post-quiz-option"]').forEach((input) => {
     input.addEventListener("change", () => {
       state.postQuiz.selectedOption = input.value;
+      renderPostQuizQuestion();
     });
   });
 
@@ -1372,19 +1500,24 @@ function renderReviewQuestion() {
       const selected = state.review.selectedOption === key;
       const isCorrect = state.review.answered && question.correct_option === key;
       const isIncorrect = state.review.answered && selected && question.correct_option !== key;
-      const className = ["challenge-option", isCorrect ? "correct" : "", isIncorrect ? "incorrect" : ""].filter(Boolean).join(" ");
+      const className = ["challenge-option", "review-option", selected ? "selected" : "", isCorrect ? "correct" : "", isIncorrect ? "incorrect" : ""].filter(Boolean).join(" ");
       return `
         <label class="${className}">
           <input type="radio" name="review-option" value="${key}" ${selected ? "checked" : ""} ${state.review.answered ? "disabled" : ""} />
-          <span>${key}. ${escapeHTML(value)}</span>
+          <span class="option-key">${key}</span>
+          <span class="option-value">${escapeHTML(value)}</span>
         </label>
       `;
     })
     .join("");
 
   reviewOptions.querySelectorAll('input[name="review-option"]').forEach((input) => {
-    input.addEventListener("change", () => {
+    input.addEventListener("change", async () => {
       state.review.selectedOption = input.value;
+      renderReviewQuestion();
+      if (!state.review.answered) {
+        await submitCurrentReviewAnswer();
+      }
     });
   });
 
@@ -1463,6 +1596,10 @@ function vocabularyStatusLabel(status) {
 async function loadVocabularyList() {
   const suffix = state.vocabularyFilter ? `?status=${encodeURIComponent(state.vocabularyFilter)}` : "";
   vocabularyList.innerHTML = `<li class="empty-state">正在加载生词本...</li>`;
+  await request("/api/review/prewarm", {
+    method: "POST",
+    timeoutMs: 60000,
+  });
   const result = await request(`/api/vocabulary${suffix}`);
   if (!result.ok) {
     return;
@@ -1909,13 +2046,15 @@ function isClosingQuote(ch) {
 }
 
 async function request(url, options = {}) {
-  const { loadingMessage, timeoutMs = 30000, headers = {}, ...fetchOptions } = options;
+  const { loadingMessage, timeoutMs = 30000, headers = {}, silent = false, ...fetchOptions } = options;
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
-  if (loadingMessage) {
+  if (loadingMessage && !silent) {
     setMessage(loadingMessage);
   }
-  setGlobalLoading(true);
+  if (!silent) {
+    setGlobalLoading(true);
+  }
   try {
     const response = await fetch(url, {
       headers: {
@@ -1928,16 +2067,22 @@ async function request(url, options = {}) {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setMessage(data.error || `请求失败：${response.status}`);
+      if (!silent) {
+        setMessage(data.error || `请求失败：${response.status}`);
+      }
       return { ok: false, data };
     }
     return { ok: true, data };
   } catch (error) {
-    setMessage(error.name === "AbortError" ? "请求超时，请稍后重试" : `网络错误：${error.message}`);
+    if (!silent) {
+      setMessage(error.name === "AbortError" ? "请求超时，请稍后重试" : `网络错误：${error.message}`);
+    }
     return { ok: false, data: null };
   } finally {
     window.clearTimeout(timeout);
-    setGlobalLoading(false);
+    if (!silent) {
+      setGlobalLoading(false);
+    }
   }
 }
 

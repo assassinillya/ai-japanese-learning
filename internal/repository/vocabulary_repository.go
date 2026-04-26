@@ -88,6 +88,8 @@ func (r *VocabularyRepository) ListByUser(ctx context.Context, userID int64, sta
 	if strings.TrimSpace(status) != "" {
 		query += ` AND uv.status = $2`
 		args = append(args, status)
+	} else {
+		query += ` AND uv.status <> 'mastered'`
 	}
 	query += ` ORDER BY uv.added_at DESC`
 

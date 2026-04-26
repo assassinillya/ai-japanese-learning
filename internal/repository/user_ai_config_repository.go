@@ -70,7 +70,7 @@ func (r *UserAIConfigRepository) Upsert(ctx context.Context, userID int64, cfg U
 			provider = EXCLUDED.provider,
 			provider_name = EXCLUDED.provider_name,
 			base_url = EXCLUDED.base_url,
-			api_key = EXCLUDED.api_key,
+			api_key = COALESCE(NULLIF(EXCLUDED.api_key, ''), user_ai_configs.api_key),
 			model = EXCLUDED.model,
 			api_version = EXCLUDED.api_version,
 			updated_at = NOW()
