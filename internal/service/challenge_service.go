@@ -93,7 +93,7 @@ func (s *ChallengeService) Generate(ctx context.Context, userID, articleID int64
 	promptVersion := "v0.8-review"
 	request := challengeCacheRequest(article, sentences, QuestionTypeChallengeReading)
 	if s.aiService == nil || !s.aiService.ProviderAvailableFor(ctx) {
-		return nil, fmt.Errorf("挑战阅读题需要先配置可用 AI Provider，请在个人中心查看 AI 接入说明")
+		return nil, fmt.Errorf("重点词汇和语法推荐需要先配置可用 AI Provider，请在个人中心查看 AI 接入说明")
 	}
 	aiModel = s.aiService.ModelNameFor(ctx, "ai-challenge-generator")
 	promptVersion = aiPromptVersionV12
@@ -166,7 +166,7 @@ func (s *ChallengeService) GeneratePostQuiz(ctx context.Context, userID, article
 	promptVersion := "v0.8-review"
 	request := challengeCacheRequest(article, sentences, QuestionTypePostReadingQuiz)
 	if s.aiService == nil || !s.aiService.ProviderAvailableFor(ctx) {
-		return nil, fmt.Errorf("阅读后测验需要先配置可用 AI Provider，请在个人中心查看 AI 接入说明")
+		return nil, fmt.Errorf("阅读理解题需要先配置可用 AI Provider，请在个人中心查看 AI 接入说明")
 	}
 	aiModel = s.aiService.ModelNameFor(ctx, "ai-post-quiz-generator")
 	promptVersion = aiPromptVersionV12
@@ -273,9 +273,9 @@ func (s *ChallengeService) generateQuestionsWithAI(
 	for _, sentence := range request.Sentences {
 		sentenceByID[sentence.ID] = sentence
 	}
-	questions := make([]model.ChallengeQuestion, 0, min(len(parsed.Items), 8))
+	questions := make([]model.ChallengeQuestion, 0, min(len(parsed.Items), 10))
 	for _, item := range parsed.Items {
-		if len(questions) >= 8 {
+		if len(questions) >= 10 {
 			break
 		}
 		item.CorrectOption = strings.ToUpper(strings.TrimSpace(item.CorrectOption))
@@ -299,7 +299,7 @@ func (s *ChallengeService) generateQuestionsWithAI(
 		if sentenceText == "" {
 			sentenceText = sentence.SentenceText
 		}
-		entry, _, err := s.dictionarySvc.LookupOrGenerate(ctx, item.CorrectAnswerText)
+		entry, _, err := s.dictionarySvc.LookupOrGenerateWithContext(ctx, item.CorrectAnswerText, sentenceText)
 		if err != nil {
 			return nil, fmt.Errorf("ensure correct answer dictionary entry: %w", err)
 		}

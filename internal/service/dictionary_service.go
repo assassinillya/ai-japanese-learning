@@ -44,6 +44,10 @@ func (s *DictionaryService) Lookup(ctx context.Context, text string) (*model.Dic
 }
 
 func (s *DictionaryService) LookupOrGenerate(ctx context.Context, text string) (*model.DictionaryEntry, bool, error) {
+	return s.LookupOrGenerateWithContext(ctx, text, "")
+}
+
+func (s *DictionaryService) LookupOrGenerateWithContext(ctx context.Context, text string, contextText string) (*model.DictionaryEntry, bool, error) {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return nil, false, fmt.Errorf("text is required")
@@ -57,7 +61,7 @@ func (s *DictionaryService) LookupOrGenerate(ctx context.Context, text string) (
 		return nil, false, err
 	}
 
-	generated, err := s.generateDictionaryEntry(ctx, text)
+	generated, err := s.generateDictionaryEntry(ctx, text, contextText)
 	if err != nil {
 		return nil, false, err
 	}
@@ -146,7 +150,7 @@ func (s *DictionaryService) DeleteExample(ctx context.Context, exampleID int64) 
 	return s.dictionaryRepo.DeleteExample(ctx, exampleID)
 }
 
-func (s *DictionaryService) generateDictionaryEntry(ctx context.Context, text string) (*model.DictionaryEntry, error) {
+func (s *DictionaryService) generateDictionaryEntry(ctx context.Context, text string, contextText string) (*model.DictionaryEntry, error) {
 	if s.aiService == nil {
 		entry := buildGeneratedDictionaryEntry(text)
 		return entry, validateDictionaryEntry(entry)
@@ -158,13 +162,14 @@ func (s *DictionaryService) generateDictionaryEntry(ctx context.Context, text st
 		promptVersion = aiPromptVersionV12
 	)
 	modelName := s.aiService.ModelNameFor(ctx, fallbackModel)
-	prompt := promptDictionaryEntry(text)
+	prompt := promptDictionaryEntry(text, contextText)
 	request := map[string]any{
 		"text":           text,
+		"context":        contextText,
 		"prompt_version": promptVersion,
 		"prompt":         prompt,
 	}
-	inputHash := s.aiService.HashInput(text)
+	inputHash := s.aiService.HashInput(text + "\n" + contextText)
 	cacheKey := s.aiService.CacheKey(taskType, inputHash, modelName, promptVersion)
 
 	if cached, ok, err := s.aiService.GetCached(ctx, cacheKey); err != nil {

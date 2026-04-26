@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>日读 AI v1.2</title>
+    <title>日读 AI v1.5</title>
     <link rel="stylesheet" href="/assets/styles.css" />
   </head>
   <body>
@@ -13,7 +13,7 @@
           <div class="logo-mark">日</div>
           <div>
             <h1>日读 AI</h1>
-            <p>Nihongo Flow · v1.2</p>
+            <p>Nihongo Flow · v1.5</p>
           </div>
         </div>
         <nav class="sidebar-nav" aria-label="主导航">
@@ -46,12 +46,12 @@
         </section>
         <section id="question-generation-panel" class="generation-panel hidden">
           <div class="generation-row">
-            <span>挑战阅读题</span>
+            <span>重点词汇 / 语法</span>
             <div class="progress-bar compact-progress"><span id="challenge-generation-bar"></span></div>
             <strong id="challenge-generation-status">等待生成</strong>
           </div>
           <div class="generation-row">
-            <span>阅读后测验</span>
+            <span>阅读理解</span>
             <div class="progress-bar compact-progress"><span id="post-quiz-generation-bar"></span></div>
             <strong id="post-quiz-generation-status">等待生成</strong>
           </div>
@@ -206,8 +206,7 @@
           <div id="article-detail" class="summary card">请选择一篇文章。</div>
           <div class="detail-actions toolbar">
             <button id="open-reading-button" class="btn btn-primary">进入阅读</button>
-            <button id="open-challenge-button" class="btn btn-secondary">挑战阅读</button>
-            <button id="open-post-quiz-button" class="btn btn-secondary">阅读后测验</button>
+            <button id="open-post-quiz-button" class="btn btn-secondary">阅读理解</button>
             <button id="reprocess-button" class="btn btn-ghost">重新处理文章</button>
           </div>
           <ol id="sentence-list" class="list sentence-list hidden"></ol>
@@ -218,8 +217,6 @@
             <button class="btn btn-ghost" data-view="articles">返回文章</button>
             <div id="reading-header" class="reading-title">请选择一篇文章进入阅读。</div>
             <div class="detail-actions">
-              <button class="btn btn-secondary" id="open-challenge-button-toolbar" data-view="challenge">挑战阅读</button>
-              <button class="btn btn-secondary" id="open-post-quiz-button-toolbar" data-view="post-quiz">测验</button>
               <button class="btn btn-ghost" data-view="vocabulary">生词本</button>
             </div>
           </header>
@@ -230,6 +227,14 @@
               <span>框选日语词语查词</span>
               <span>加入生词本会保存上下文</span>
               <button class="btn btn-primary compact" data-view="review">去复习</button>
+              <div class="side-study-section">
+                <strong>重点词汇 / 重点语法</strong>
+                <div id="key-vocabulary-list" class="side-study-list"><span class="meta">等待 AI 分析文章。</span></div>
+              </div>
+              <div class="side-study-section">
+                <strong>阅读理解</strong>
+                <div id="reading-comprehension-list" class="side-study-list"><span class="meta">等待 AI 生成题目。</span></div>
+              </div>
             </aside>
           </div>
         </section>
@@ -418,6 +423,12 @@
         <div id="lookup-popup-title" class="lookup-title">查词</div>
         <div id="lookup-popup-body" class="lookup-body">请选择文章中的文本。</div>
         <button id="add-vocabulary-button" class="btn btn-primary compact">加入生词本</button>
+      </div>
+    </aside>
+    <aside id="reading-quiz-modal" class="quiz-modal hidden">
+      <div class="quiz-modal-card">
+        <button id="reading-quiz-close-button" class="btn btn-ghost compact" type="button">关闭</button>
+        <div id="reading-quiz-modal-body"></div>
       </div>
     </aside>
     <script src="/assets/app.js"></script>

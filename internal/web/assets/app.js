@@ -18,6 +18,7 @@ const state = {
     selectedOption: "",
     answered: false,
   },
+  readingQuizModalIndex: 0,
   review: {
     items: [],
     currentIndex: 0,
@@ -98,6 +99,11 @@ const openChallengeButton = document.getElementById("open-challenge-button");
 const openPostQuizButton = document.getElementById("open-post-quiz-button");
 const openChallengeToolbarButton = document.getElementById("open-challenge-button-toolbar");
 const openPostQuizToolbarButton = document.getElementById("open-post-quiz-button-toolbar");
+const keyVocabularyList = document.getElementById("key-vocabulary-list");
+const readingComprehensionList = document.getElementById("reading-comprehension-list");
+const readingQuizModal = document.getElementById("reading-quiz-modal");
+const readingQuizModalBody = document.getElementById("reading-quiz-modal-body");
+const readingQuizCloseButton = document.getElementById("reading-quiz-close-button");
 const questionGenerationPanel = document.getElementById("question-generation-panel");
 const challengeGenerationBar = document.getElementById("challenge-generation-bar");
 const challengeGenerationStatus = document.getElementById("challenge-generation-status");
@@ -151,10 +157,6 @@ document.querySelectorAll("[data-view]").forEach((button) => {
     }
     if (view === "reading" && state.user && state.selectedArticleId) {
       await loadReadingArticle(state.selectedArticleId);
-    }
-    if (view === "challenge" && state.user && state.selectedArticleId) {
-      showView(view);
-      await loadChallengeQuestions(state.selectedArticleId);
     }
     if (view === "post-quiz" && state.user && state.selectedArticleId) {
       showView(view);
@@ -444,30 +446,41 @@ openReadingButton.addEventListener("click", async () => {
   showView("reading");
 });
 
-openChallengeButton.addEventListener("click", async () => {
+openChallengeButton?.addEventListener("click", async () => {
   if (!state.selectedArticleId) {
     setMessage("请先选择一篇文章");
     return;
   }
   if (state.questionGeneration.challenge !== "ready") {
-    setMessage("挑战阅读题还没有生成完成，请等待进度条完成。");
+    setMessage("重点词推荐还没有生成完成，请等待进度条完成。");
     return;
   }
-  showView("challenge");
-  await loadChallengeQuestions(state.selectedArticleId);
+  showView("reading");
+  await loadReadingArticle(state.selectedArticleId);
 });
 
-openPostQuizButton.addEventListener("click", async () => {
+openPostQuizButton?.addEventListener("click", async () => {
   if (!state.selectedArticleId) {
     setMessage("请先选择一篇文章");
     return;
   }
   if (state.questionGeneration.postQuiz !== "ready") {
-    setMessage("阅读后测验还没有生成完成，请等待进度条完成。");
+    setMessage("阅读理解题还没有生成完成，请等待进度条完成。");
     return;
   }
-  showView("post-quiz");
   await loadPostQuizQuestions(state.selectedArticleId);
+  showView("reading");
+  openReadingQuizModal(0);
+});
+
+readingQuizCloseButton?.addEventListener("click", () => {
+  closeReadingQuizModal();
+});
+
+readingQuizModal?.addEventListener("mousedown", (event) => {
+  if (event.target === readingQuizModal) {
+    closeReadingQuizModal();
+  }
 });
 
 addVocabularyButton.addEventListener("click", async () => {
@@ -798,7 +811,7 @@ readingContent.addEventListener("mouseup", () => {
   scheduleLookupFromSelection();
 });
 
-challengeSentence.addEventListener("mouseup", () => {
+challengeSentence?.addEventListener("mouseup", () => {
   scheduleLookupFromSelection();
 });
 
@@ -903,10 +916,18 @@ function renderUser() {
     sentenceList.innerHTML = "";
     readingHeader.textContent = "请选择一篇文章进入阅读。";
     readingContent.innerHTML = "";
-    challengeHeader.textContent = "请选择一篇文章开始挑战阅读。";
-    challengeCard.classList.add("hidden");
+    if (challengeHeader) {
+      challengeHeader.textContent = "请选择一篇文章开始挑战阅读。";
+    }
+    challengeCard?.classList.add("hidden");
     postQuizHeader.textContent = "请选择一篇文章开始测验。";
     postQuizCard.classList.add("hidden");
+    if (keyVocabularyList) {
+      keyVocabularyList.innerHTML = `<span class="meta">等待 AI 分析文章。</span>`;
+    }
+    if (readingComprehensionList) {
+      readingComprehensionList.innerHTML = `<span class="meta">等待 AI 生成题目。</span>`;
+    }
     reviewHeader.textContent = "加载今日待复习生词。";
     reviewCard.classList.add("hidden");
     postQuizResultsList.innerHTML = "";
@@ -1224,6 +1245,14 @@ async function refreshQuestionGenerationReadiness(articleId) {
   ]);
   setQuestionGenerationStatus("challenge", challengeResult.ok && (challengeResult.data.items || []).length > 0 ? "ready" : "pending");
   setQuestionGenerationStatus("postQuiz", postQuizResult.ok && (postQuizResult.data.items || []).length > 0 ? "ready" : "pending");
+  if (challengeResult.ok) {
+    state.challenge.questions = challengeResult.data.items || [];
+    renderKeyVocabularyRecommendations();
+  }
+  if (postQuizResult.ok) {
+    state.postQuiz.questions = postQuizResult.data.items || [];
+    renderReadingComprehensionList();
+  }
   hideQuestionGenerationPanelIfReady();
 }
 
@@ -1249,6 +1278,15 @@ async function generateQuestionSet(articleId, type) {
     silent: true,
   });
   setQuestionGenerationStatus(type, result.ok && (result.data.items || []).length > 0 ? "ready" : "failed");
+  if (result.ok) {
+    if (type === "challenge") {
+      state.challenge.questions = result.data.items || [];
+      renderKeyVocabularyRecommendations();
+    } else {
+      state.postQuiz.questions = result.data.items || [];
+      renderReadingComprehensionList();
+    }
+  }
   hideQuestionGenerationPanelIfReady();
 }
 
@@ -1285,50 +1323,254 @@ function setQuestionGenerationStatus(type, status) {
 }
 
 function updateQuestionActionButtons() {
-  const challengeReady = state.questionGeneration.challenge === "ready";
   const postQuizReady = state.questionGeneration.postQuiz === "ready";
   [openChallengeButton, openChallengeToolbarButton].forEach((button) => {
     if (button) {
-      button.disabled = !challengeReady;
-      button.title = challengeReady ? "" : "挑战阅读题生成完成后可进入";
+      button.disabled = true;
+      button.title = "挑战阅读已改为阅读页右侧的重点词汇和语法推荐";
     }
   });
   [openPostQuizButton, openPostQuizToolbarButton].forEach((button) => {
     if (button) {
       button.disabled = !postQuizReady;
-      button.title = postQuizReady ? "" : "阅读后测验生成完成后可进入";
+      button.title = postQuizReady ? "" : "阅读理解题生成完成后会显示在右侧";
     }
   });
 }
 
+function renderKeyVocabularyRecommendations() {
+  if (!keyVocabularyList) {
+    return;
+  }
+  const items = state.challenge.questions || [];
+  if (items.length === 0) {
+    keyVocabularyList.innerHTML = `<span class="meta">暂无重点词汇或语法推荐。</span>`;
+    return;
+  }
+  const vocabularyItems = items.filter((item) => recommendationKind(item) !== "grammar").slice(0, 5);
+  const grammarItems = items.filter((item) => recommendationKind(item) === "grammar").slice(0, 5);
+  const renderGroup = (title, groupItems, emptyText) => `
+    <div class="recommendation-group">
+      <span class="meta strong-meta">${title}</span>
+      ${
+        groupItems.length === 0
+          ? `<span class="meta">${emptyText}</span>`
+          : groupItems
+              .map(
+                (item) => `
+        <div class="key-vocab-card">
+          <strong>${escapeHTML(item.correct_answer_text || item.masked_sentence || "-")}</strong>
+          <div class="key-vocab-meta">
+            <span class="badge badge-jlpt">${escapeHTML(item.option_a || item.jlpt_level || "unknown")}</span>
+            <span class="tag">频次 ${escapeHTML(item.option_b || "-")}</span>
+            <span class="tag">重要度 ${escapeHTML(item.option_c || "-")}</span>
+            <span class="tag">${recommendationKind(item) === "grammar" ? "文法" : "词汇"}</span>
+          </div>
+          <span class="meta">${escapeHTML(item.explanation || item.option_d || "")}</span>
+          <button class="btn btn-secondary compact" data-add-key-vocab="${item.id}">加入生词本</button>
+        </div>
+      `,
+              )
+              .join("")
+      }
+    </div>
+  `;
+  keyVocabularyList.innerHTML = [
+    renderGroup("重点词汇", vocabularyItems, "暂无重点词汇推荐。"),
+    renderGroup("重点语法", grammarItems, "暂无重点语法推荐。"),
+  ].join("");
+  keyVocabularyList.querySelectorAll("[data-add-key-vocab]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const item = items.find((candidate) => String(candidate.id) === button.dataset.addKeyVocab);
+      if (!item) {
+        return;
+      }
+      const result = await request("/api/vocabulary", {
+        method: "POST",
+        body: JSON.stringify({
+          dictionary_entry_id: item.correct_entry_id,
+          article_id: state.selectedArticleId,
+          source_sentence_id: item.sentence_id,
+          selected_text: item.correct_answer_text || item.masked_sentence,
+          source_sentence_text: item.sentence_text,
+        }),
+        loadingMessage: "正在加入生词本...",
+      });
+      if (result.ok) {
+        button.disabled = true;
+        button.textContent = "已加入";
+        setMessage(result.data.created ? "重点词已加入生词本" : "该词已在生词本中");
+      }
+    });
+  });
+}
+
+function recommendationKind(item) {
+  const raw = `${item.option_d || ""} ${item.masked_sentence || ""} ${item.correct_answer_text || ""}`.toLowerCase();
+  if (raw.includes("grammar") || raw.includes("文法") || raw.includes("语法") || raw.includes("固定用法")) {
+    return "grammar";
+  }
+  return "vocabulary";
+}
+
+function renderReadingComprehensionList() {
+  if (!readingComprehensionList) {
+    return;
+  }
+  const items = state.postQuiz.questions || [];
+  if (items.length === 0) {
+    readingComprehensionList.innerHTML = `<span class="meta">暂无阅读理解题。</span>`;
+    return;
+  }
+  readingComprehensionList.innerHTML = items
+    .map((item, index) => {
+      const selected = getCachedReadingQuizOption(item.id);
+      return `
+        <button class="reading-comprehension-item ${selected ? "answered" : ""}" data-reading-quiz-index="${index}">
+          <strong>第 ${index + 1} 题</strong>
+          <span>${escapeHTML(item.masked_sentence)}</span>
+          ${selected ? `<span class="meta">已选择：${escapeHTML(selected)}</span>` : `<span class="meta">点击作答</span>`}
+        </button>
+      `;
+    })
+    .join("");
+  readingComprehensionList.querySelectorAll("[data-reading-quiz-index]").forEach((button) => {
+    button.addEventListener("click", () => {
+      openReadingQuizModal(Number(button.dataset.readingQuizIndex));
+    });
+  });
+}
+
+function openReadingQuizModal(index) {
+  const question = state.postQuiz.questions[index];
+  if (!question || !readingQuizModal || !readingQuizModalBody) {
+    return;
+  }
+  state.readingQuizModalIndex = index;
+  const selectedOption = getCachedReadingQuizOption(question.id);
+  const submitted = getCachedReadingQuizSubmitted(question.id);
+  const options = [
+    ["A", question.option_a],
+    ["B", question.option_b],
+    ["C", question.option_c],
+    ["D", question.option_d],
+  ];
+  readingQuizModalBody.innerHTML = `
+    <div class="progress-label">阅读理解 · 第 ${index + 1} / ${state.postQuiz.questions.length} 题</div>
+    <h3>${escapeHTML(question.masked_sentence)}</h3>
+    <p class="muted">${escapeHTML(question.sentence_text || "")}</p>
+    <div class="challenge-options">
+      ${options
+        .map(([key, value]) => {
+          const selected = selectedOption === key;
+          const isCorrect = submitted && question.correct_option === key;
+          const isIncorrect = submitted && selected && question.correct_option !== key;
+          const className = ["challenge-option", "review-option", selected ? "selected" : "", isCorrect ? "correct" : "", isIncorrect ? "incorrect" : ""].filter(Boolean).join(" ");
+          return `
+            <label class="${className}">
+              <input type="radio" name="reading-quiz-option" value="${key}" ${selected ? "checked" : ""} ${submitted ? "disabled" : ""} />
+              <span class="option-key">${key}</span>
+              <span class="option-value">${escapeHTML(value)}</span>
+            </label>
+          `;
+        })
+        .join("")}
+    </div>
+    <div id="reading-quiz-modal-feedback" class="summary ${submitted ? "" : "hidden"}">
+      ${submitted ? renderReadingQuizFeedback(question, selectedOption) : ""}
+    </div>
+    <div class="detail-actions">
+      <button id="reading-quiz-submit-button" class="btn btn-primary" ${!selectedOption || submitted ? "disabled" : ""}>提交答案</button>
+    </div>
+  `;
+  readingQuizModal.classList.remove("hidden");
+  readingQuizModalBody.querySelectorAll('input[name="reading-quiz-option"]').forEach((input) => {
+    input.addEventListener("change", () => {
+      setCachedReadingQuizOption(question.id, input.value);
+      openReadingQuizModal(index);
+    });
+  });
+  document.getElementById("reading-quiz-submit-button")?.addEventListener("click", async () => {
+    const option = getCachedReadingQuizOption(question.id);
+    if (!option) {
+      setMessage("请先选择一个选项");
+      return;
+    }
+    const result = await request(`/api/reading/questions/${question.id}/answer`, {
+      method: "POST",
+      body: JSON.stringify({ selected_option: option }),
+      loadingMessage: "正在提交阅读理解答案...",
+    });
+    if (!result.ok) {
+      return;
+    }
+    setCachedReadingQuizSubmitted(question.id, result.data);
+    openReadingQuizModal(index);
+    renderReadingComprehensionList();
+  });
+}
+
+function closeReadingQuizModal() {
+  readingQuizModal?.classList.add("hidden");
+  renderReadingComprehensionList();
+}
+
+function readingQuizStorageKey(questionID, field) {
+  return `reading_quiz:${state.selectedArticleId || "article"}:${questionID}:${field}`;
+}
+
+function getCachedReadingQuizOption(questionID) {
+  return localStorage.getItem(readingQuizStorageKey(questionID, "option")) || "";
+}
+
+function setCachedReadingQuizOption(questionID, option) {
+  localStorage.setItem(readingQuizStorageKey(questionID, "option"), option);
+}
+
+function getCachedReadingQuizSubmitted(questionID) {
+  const raw = localStorage.getItem(readingQuizStorageKey(questionID, "submitted"));
+  if (!raw) {
+    return null;
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function setCachedReadingQuizSubmitted(questionID, result) {
+  localStorage.setItem(readingQuizStorageKey(questionID, "submitted"), JSON.stringify(result));
+}
+
+function renderReadingQuizFeedback(question, selectedOption) {
+  const submitted = getCachedReadingQuizSubmitted(question.id);
+  const isCorrect = submitted ? submitted.is_correct : question.correct_option === selectedOption;
+  return [
+    isCorrect ? "回答正确" : "回答错误",
+    `正确选项：${escapeHTML(question.correct_option)}`,
+    `正确答案：${escapeHTML(question.correct_answer_text)}`,
+    `解析：${escapeHTML(question.explanation || "-")}`,
+  ].join("\n");
+}
+
 async function loadChallengeQuestions(articleId) {
-  challengeHeader.textContent = "正在加载挑战阅读题...";
+  if (challengeHeader) {
+    challengeHeader.textContent = "正在加载重点词汇和语法推荐...";
+  }
   challengeLoading?.classList.remove("hidden");
-  challengeCard.classList.add("hidden");
+  challengeCard?.classList.add("hidden");
   const result = await request(`/api/reading/articles/${articleId}/challenge-questions`, { timeoutMs: 60000 });
   challengeLoading?.classList.add("hidden");
   if (!result.ok) {
-    challengeHeader.textContent = "挑战阅读题加载失败，请检查 AI 配置或稍后重试。";
+    if (keyVocabularyList) {
+      keyVocabularyList.innerHTML = `<span class="meta">重点词推荐加载失败，请检查 AI 配置。</span>`;
+    }
     return;
   }
 
   state.challenge.questions = result.data.items || [];
-  state.challenge.currentIndex = 0;
-  state.challenge.selectedOption = "";
-  state.challenge.answered = false;
-  hideLookupPopup();
-
-  if (state.challenge.questions.length === 0) {
-    challengeHeader.textContent = "当前文章还没有可用的挑战题，请等待上传后的题目生成任务完成。";
-    challengeCard.classList.add("hidden");
-    return;
-  }
-
-  challengeHeader.textContent = "挑战阅读会按文章顺序出题。你仍然可以在题干句子中选中文本查词。";
-  challengeCard.classList.remove("hidden");
-  challengeFeedback.classList.add("hidden");
-  challengeFeedback.textContent = "";
-  renderChallengeQuestion();
+  renderKeyVocabularyRecommendations();
 }
 
 async function loadPostQuizQuestions(articleId) {
@@ -1344,14 +1586,15 @@ async function loadPostQuizQuestions(articleId) {
   state.postQuiz.selectedOption = "";
   state.postQuiz.answered = false;
   hideLookupPopup();
+  renderReadingComprehensionList();
 
   if (state.postQuiz.questions.length === 0) {
-    postQuizHeader.textContent = "当前文章还没有可用的测验题，请等待上传后的题目生成任务完成。";
+    postQuizHeader.textContent = "当前文章还没有可用的阅读理解题，请等待上传后的题目生成任务完成。";
     postQuizCard.classList.add("hidden");
     return;
   }
 
-  postQuizHeader.textContent = "阅读后测验会基于文章中的重点词汇出题。";
+  postQuizHeader.textContent = "阅读理解题会基于文章主旨、细节和句间关系出题。";
   postQuizCard.classList.remove("hidden");
   postQuizFeedback.classList.add("hidden");
   postQuizFeedback.textContent = "";
@@ -1881,7 +2124,10 @@ async function lookupSelection(selectionState) {
       popupBody.innerHTML = renderLookupStatus("本地词典未命中，正在调用 AI 生成释义、词性和例句...");
       const generateResult = await request("/api/dictionary/generate", {
         method: "POST",
-        body: JSON.stringify({ text: selectionState.text }),
+        body: JSON.stringify({
+          text: selectionState.text,
+          context: selectionState.contextSnippet || selectionState.sentenceText,
+        }),
         loadingMessage: "正在调用 AI 生成词条...",
         timeoutMs: 60000,
       });
@@ -1941,11 +2187,19 @@ function formatDictionaryEntry(entry, generated, contextSnippet) {
   return `
     <div class="dictionary-row"><strong>原形</strong><span>${escapeHTML(entry.lemma || "-")}</span></div>
     <div class="dictionary-row"><strong>读音</strong><span>${escapeHTML(entry.reading || "-")} / ${escapeHTML(entry.romaji || "-")}</span></div>
-    <div class="dictionary-row"><strong>词性</strong><span class="tag">${escapeHTML(entry.part_of_speech || "-")}</span> <span class="badge badge-jlpt">${escapeHTML(entry.jlpt_level || "-")}</span></div>
+    <div class="dictionary-row"><strong>分类</strong><span class="tag">${escapeHTML(dictionaryEntryKindLabel(entry.part_of_speech))}</span> <span class="tag">${escapeHTML(entry.part_of_speech || "-")}</span> <span class="badge badge-jlpt">${escapeHTML(entry.jlpt_level || "-")}</span></div>
     <div><strong>中文释义</strong><br>${escapeHTML(entry.meaning_zh || entry.primary_meaning_zh || "-")}</div>
     <div><strong>保存例句</strong><br>${escapeHTML(contextSnippet || "-")}</div>
     <div class="meta">${generated ? "本地未命中，已由 AI 生成并写入词典。" : "来自本地词典或已缓存词条。"}</div>
   `;
+}
+
+function dictionaryEntryKindLabel(partOfSpeech) {
+  const value = String(partOfSpeech || "").toLowerCase();
+  if (value === "grammar" || value.includes("grammar") || value.includes("文法") || value.includes("语法")) {
+    return "文法";
+  }
+  return "单词";
 }
 
 function renderLookupStatus(message) {

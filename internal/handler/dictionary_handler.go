@@ -8,7 +8,8 @@ import (
 )
 
 type dictionaryGenerateRequest struct {
-	Text string `json:"text"`
+	Text    string `json:"text"`
+	Context string `json:"context"`
 }
 
 type dictionaryExampleRequest struct {
@@ -50,7 +51,7 @@ func (r *Router) handleDictionaryGenerate(w http.ResponseWriter, req *http.Reque
 		return
 	}
 
-	entry, generated, err := r.dictionaryService.LookupOrGenerate(req.Context(), input.Text)
+	entry, generated, err := r.dictionaryService.LookupOrGenerateWithContext(req.Context(), input.Text, input.Context)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
