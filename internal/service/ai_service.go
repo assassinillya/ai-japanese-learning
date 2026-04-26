@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"sync"
 
 	"ai-japanese-learning/internal/model"
 	"ai-japanese-learning/internal/repository"
@@ -13,6 +14,8 @@ import (
 
 type AIService struct {
 	aiRepo   *repository.AIRepository
+	mu       sync.RWMutex
+	config   AIProviderConfig
 	provider AIProvider
 }
 
@@ -21,6 +24,67 @@ func NewAIService(aiRepo *repository.AIRepository, provider AIProvider) *AIServi
 		aiRepo:   aiRepo,
 		provider: provider,
 	}
+}
+
+func NewConfiguredAIService(aiRepo *repository.AIRepository, cfg AIProviderConfig) *AIService {
+	cfg = NormalizeAIProviderConfig(cfg)
+	return &AIService{
+		aiRepo:   aiRepo,
+		config:   cfg,
+		provider: NewAIProviderFromConfig(cfg),
+	}
+}
+
+func (s *AIService) CurrentStatus() AIProviderStatus {
+	if s == nil {
+		return SanitizedAIProviderStatus(AIProviderConfig{}, nil)
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return SanitizedAIProviderStatus(s.config, s.provider)
+}
+
+func (s *AIService) ConfigureProvider(cfg AIProviderConfig) (AIProviderStatus, error) {
+	if s == nil {
+		return AIProviderStatus{}, fmt.Errorf("ai service is not initialized")
+	}
+	cfg = NormalizeAIProviderConfig(cfg)
+	provider := NewAIProviderFromConfig(cfg)
+	s.mu.Lock()
+	s.config = cfg
+	s.provider = provider
+	s.mu.Unlock()
+	return SanitizedAIProviderStatus(cfg, provider), nil
+}
+
+func (s *AIService) ListProviderModels(ctx context.Context, cfg AIProviderConfig) ([]string, AIProviderStatus, error) {
+	cfg = NormalizeAIProviderConfig(cfg)
+	provider := NewAIProviderFromConfig(cfg)
+	status := SanitizedAIProviderStatus(cfg, provider)
+	if provider == nil {
+		return nil, status, fmt.Errorf("api key is required for %s", status.ProviderName)
+	}
+	models, err := provider.ListModels(ctx)
+	return models, status, err
+}
+
+func (s *AIService) CheckProvider(ctx context.Context, cfg AIProviderConfig) (AIProviderStatus, error) {
+	cfg = NormalizeAIProviderConfig(cfg)
+	provider := NewAIProviderFromConfig(cfg)
+	status := SanitizedAIProviderStatus(cfg, provider)
+	if provider == nil {
+		return status, fmt.Errorf("api key is required for %s", status.ProviderName)
+	}
+	return status, provider.Check(ctx)
+}
+
+func (s *AIService) currentProvider() AIProvider {
+	if s == nil {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.provider
 }
 
 func (s *AIService) CacheKey(taskType, inputHash, modelName, promptVersion string) string {
@@ -33,21 +97,23 @@ func (s *AIService) HashInput(input string) string {
 }
 
 func (s *AIService) ProviderAvailable() bool {
-	return s != nil && s.provider != nil
+	return s != nil && s.currentProvider() != nil
 }
 
 func (s *AIService) ModelName(fallback string) string {
-	if s != nil && s.provider != nil && s.provider.ModelName() != "" {
-		return s.provider.ModelName()
+	provider := s.currentProvider()
+	if provider != nil && provider.ModelName() != "" {
+		return provider.ModelName()
 	}
 	return fallback
 }
 
 func (s *AIService) CompleteJSON(ctx context.Context, prompt AIPrompt) (string, error) {
-	if s == nil || s.provider == nil {
+	provider := s.currentProvider()
+	if provider == nil {
 		return "", fmt.Errorf("ai provider is not configured")
 	}
-	return s.provider.CompleteJSON(ctx, prompt)
+	return provider.CompleteJSON(ctx, prompt)
 }
 
 func (s *AIService) GetCached(ctx context.Context, cacheKey string) (*model.AICacheEntry, bool, error) {

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -145,7 +146,7 @@ func (r *VocabularyRepository) ListDueForReview(ctx context.Context, userID int6
 		JOIN dictionary_entries de ON de.id = uv.dictionary_entry_id
 		LEFT JOIN articles a ON a.id = uv.article_id
 		WHERE uv.user_id = $1
-		  AND uv.status <> 'ignored'
+		  AND uv.status NOT IN ('ignored', 'mastered')
 		  AND uv.next_review_at <= NOW()
 		ORDER BY uv.next_review_at ASC, uv.added_at ASC
 		LIMIT $2
@@ -184,6 +185,32 @@ func (r *VocabularyRepository) UpdateStatus(ctx context.Context, userID, vocabul
 		return ErrVocabularyNotFound
 	}
 	return nil
+}
+
+func (r *VocabularyRepository) UpdateStatusBatch(ctx context.Context, userID int64, vocabularyIDs []int64, status model.VocabularyStatus) (int64, error) {
+	if len(vocabularyIDs) == 0 {
+		return 0, nil
+	}
+	placeholders := make([]string, 0, len(vocabularyIDs))
+	args := []any{userID, status}
+	for index, id := range vocabularyIDs {
+		placeholders = append(placeholders, "$"+strconv.Itoa(index+3))
+		args = append(args, id)
+	}
+	result, err := r.db.ExecContext(ctx, `
+		UPDATE user_vocabulary
+		SET status = $2,
+		    updated_at = NOW()
+		WHERE user_id = $1 AND id IN (`+strings.Join(placeholders, ",")+`)
+	`, args...)
+	if err != nil {
+		return 0, fmt.Errorf("batch update vocabulary status: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("rows affected for batch update vocabulary status: %w", err)
+	}
+	return rows, nil
 }
 
 func (r *VocabularyRepository) UpdateReviewProgress(
@@ -267,6 +294,30 @@ func (r *VocabularyRepository) Delete(ctx context.Context, userID, vocabularyID 
 		return ErrVocabularyNotFound
 	}
 	return nil
+}
+
+func (r *VocabularyRepository) DeleteBatch(ctx context.Context, userID int64, vocabularyIDs []int64) (int64, error) {
+	if len(vocabularyIDs) == 0 {
+		return 0, nil
+	}
+	placeholders := make([]string, 0, len(vocabularyIDs))
+	args := []any{userID}
+	for index, id := range vocabularyIDs {
+		placeholders = append(placeholders, "$"+strconv.Itoa(index+2))
+		args = append(args, id)
+	}
+	result, err := r.db.ExecContext(ctx, `
+		DELETE FROM user_vocabulary
+		WHERE user_id = $1 AND id IN (`+strings.Join(placeholders, ",")+`)
+	`, args...)
+	if err != nil {
+		return 0, fmt.Errorf("batch delete vocabulary: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("rows affected for batch delete vocabulary: %w", err)
+	}
+	return rows, nil
 }
 
 type userVocabularyScanner interface {

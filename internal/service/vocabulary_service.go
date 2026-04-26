@@ -140,6 +140,38 @@ func (s *VocabularyService) UpdateStatus(ctx context.Context, userID, vocabulary
 	return s.vocabularyRepo.GetDetail(ctx, userID, vocabularyID)
 }
 
+func (s *VocabularyService) UpdateStatusBatch(ctx context.Context, userID int64, vocabularyIDs []int64, status model.VocabularyStatus) (int64, error) {
+	if !isValidVocabularyStatus(status) {
+		return 0, fmt.Errorf("invalid vocabulary status")
+	}
+	vocabularyIDs = normalizeVocabularyIDs(vocabularyIDs)
+	if len(vocabularyIDs) == 0 {
+		return 0, fmt.Errorf("vocabulary_ids are required")
+	}
+	return s.vocabularyRepo.UpdateStatusBatch(ctx, userID, vocabularyIDs, status)
+}
+
 func (s *VocabularyService) Delete(ctx context.Context, userID, vocabularyID int64) error {
 	return s.vocabularyRepo.Delete(ctx, userID, vocabularyID)
+}
+
+func (s *VocabularyService) DeleteBatch(ctx context.Context, userID int64, vocabularyIDs []int64) (int64, error) {
+	vocabularyIDs = normalizeVocabularyIDs(vocabularyIDs)
+	if len(vocabularyIDs) == 0 {
+		return 0, fmt.Errorf("vocabulary_ids are required")
+	}
+	return s.vocabularyRepo.DeleteBatch(ctx, userID, vocabularyIDs)
+}
+
+func normalizeVocabularyIDs(ids []int64) []int64 {
+	seen := map[int64]bool{}
+	normalized := make([]int64, 0, len(ids))
+	for _, id := range ids {
+		if id <= 0 || seen[id] {
+			continue
+		}
+		seen[id] = true
+		normalized = append(normalized, id)
+	}
+	return normalized
 }

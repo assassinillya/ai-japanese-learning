@@ -21,10 +21,12 @@ type Config struct {
 }
 
 type AIConfig struct {
-	Provider string
-	BaseURL  string
-	APIKey   string
-	Model    string
+	Provider     string
+	ProviderName string
+	BaseURL      string
+	APIKey       string
+	Model        string
+	APIVersion   string
 }
 
 func Load() (*Config, error) {
@@ -32,10 +34,12 @@ func Load() (*Config, error) {
 		ServerAddress: ":8080",
 		TokenSecret:   os.Getenv("APP_TOKEN_SECRET"),
 		AI: AIConfig{
-			Provider: os.Getenv("AI_PROVIDER"),
-			BaseURL:  os.Getenv("AI_BASE_URL"),
-			APIKey:   os.Getenv("AI_API_KEY"),
-			Model:    os.Getenv("AI_MODEL"),
+			Provider:     os.Getenv("AI_PROVIDER"),
+			ProviderName: os.Getenv("AI_PROVIDER_NAME"),
+			BaseURL:      os.Getenv("AI_BASE_URL"),
+			APIKey:       os.Getenv("AI_API_KEY"),
+			Model:        os.Getenv("AI_MODEL"),
+			APIVersion:   os.Getenv("AI_API_VERSION"),
 		},
 	}
 	if addr := os.Getenv("SERVER_ADDRESS"); addr != "" {

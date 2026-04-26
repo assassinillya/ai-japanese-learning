@@ -3,6 +3,7 @@ const state = {
   user: null,
   selectedArticleId: null,
   selectedVocabularyId: null,
+  selectedVocabularyIds: new Set(),
   readingArticle: null,
   vocabularyFilter: "",
   challenge: {
@@ -52,6 +53,7 @@ const sentenceList = document.getElementById("sentence-list");
 const readingHeader = document.getElementById("reading-header");
 const readingContent = document.getElementById("reading-content");
 const challengeHeader = document.getElementById("challenge-header");
+const challengeLoading = document.getElementById("challenge-loading");
 const challengeCard = document.getElementById("challenge-card");
 const challengeProgress = document.getElementById("challenge-progress");
 const challengeSentence = document.getElementById("challenge-sentence");
@@ -92,12 +94,23 @@ const nextChallengeQuestionButton = document.getElementById("next-challenge-ques
 const submitPostQuizAnswerButton = document.getElementById("submit-post-quiz-answer-button");
 const nextPostQuizQuestionButton = document.getElementById("next-post-quiz-question-button");
 const submitReviewAnswerButton = document.getElementById("submit-review-answer-button");
+const masterReviewWordButton = document.getElementById("master-review-word-button");
 const nextReviewQuestionButton = document.getElementById("next-review-question-button");
 const loadPostQuizResultsButton = document.getElementById("load-post-quiz-results-button");
 const loadReviewRecordsButton = document.getElementById("load-review-records-button");
 const completeOnboardingButton = document.getElementById("complete-onboarding-button");
 const reprocessButton = document.getElementById("reprocess-button");
 const aiConfigForm = document.getElementById("ai-config-form");
+const aiProviderSelect = document.getElementById("ai-provider-select");
+const aiModelSelect = document.getElementById("ai-model-select");
+const aiLoadModelsButton = document.getElementById("ai-load-models-button");
+const aiCheckButton = document.getElementById("ai-check-button");
+const aiConfigStatus = document.getElementById("ai-config-status");
+const vocabularySelectAll = document.getElementById("vocabulary-select-all");
+const vocabularySelectedCount = document.getElementById("vocabulary-selected-count");
+const batchMasterVocabularyButton = document.getElementById("batch-master-vocabulary-button");
+const batchLearningVocabularyButton = document.getElementById("batch-learning-vocabulary-button");
+const batchDeleteVocabularyButton = document.getElementById("batch-delete-vocabulary-button");
 
 document.querySelectorAll("[data-view]").forEach((button) => {
   button.addEventListener("click", async () => {
@@ -123,10 +136,15 @@ document.querySelectorAll("[data-view]").forEach((button) => {
       await loadReadingArticle(state.selectedArticleId);
     }
     if (view === "challenge" && state.user && state.selectedArticleId) {
+      showView(view);
       await loadChallengeQuestions(state.selectedArticleId);
     }
     if (view === "post-quiz" && state.user && state.selectedArticleId) {
+      showView(view);
       await loadPostQuizQuestions(state.selectedArticleId);
+    }
+    if (view === "profile" && state.user) {
+      await loadAIConfig();
     }
     showView(view);
   });
@@ -185,25 +203,158 @@ document.getElementById("logout-button").addEventListener("click", async () => {
 });
 
 if (aiConfigForm) {
-  const savedAIConfig = JSON.parse(localStorage.getItem("ai_config_hint") || "{}");
-  Object.entries(savedAIConfig).forEach(([key, value]) => {
-    if (aiConfigForm.elements[key] && key !== "api_key") {
-      aiConfigForm.elements[key].value = value;
-    }
+  aiProviderSelect?.addEventListener("change", () => {
+    applyAIProviderDefaults(aiProviderSelect.value);
   });
-  aiConfigForm.addEventListener("submit", (event) => {
+  aiLoadModelsButton?.addEventListener("click", async () => {
+    await loadAIModels();
+  });
+  aiCheckButton?.addEventListener("click", async () => {
+    await checkAIProvider();
+  });
+  aiConfigForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const payload = Object.fromEntries(new FormData(event.currentTarget).entries());
-    localStorage.setItem(
-      "ai_config_hint",
-      JSON.stringify({
-        provider: payload.provider,
-        base_url: payload.base_url,
-        model: payload.model,
-      }),
-    );
-    setMessage("AI 接入参数已记录。后端实际调用 AI 仍需设置环境变量并重启服务。");
+    await saveAIConfig();
   });
+}
+
+async function loadAIConfig() {
+  if (!aiConfigForm) {
+    return;
+  }
+  const result = await request("/api/ai/config", {
+    loadingMessage: "正在加载 AI 配置...",
+  });
+  if (!result.ok) {
+    return;
+  }
+  renderAIConfig(result.data);
+}
+
+function renderAIConfig(status) {
+  if (!aiConfigForm || !status) {
+    return;
+  }
+  setAIFormValue("provider", status.provider || "openai");
+  setAIFormValue("provider_name", status.provider_name || "");
+  setAIFormValue("base_url", status.base_url || "");
+  setAIFormValue("api_version", status.api_version || "");
+  setAIModelOptions(status.model ? [status.model] : [], status.model || "");
+  aiConfigStatus.innerHTML = formatAIStatus(status, status.configured ? "当前后端 AI 已配置。" : "当前后端未启用 AI，保存配置后生效。");
+}
+
+async function loadAIModels() {
+  const payload = collectAIConfigPayload();
+  const result = await request("/api/ai/models", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    loadingMessage: "正在获取模型列表...",
+    timeoutMs: 60000,
+  });
+  if (!result.ok) {
+    if (result.data?.status) {
+      aiConfigStatus.innerHTML = formatAIStatus(result.data.status, result.data.error || "获取模型列表失败。");
+    }
+    return;
+  }
+  setAIModelOptions(result.data.items || [], payload.model);
+  aiConfigStatus.innerHTML = formatAIStatus(result.data.status, `已获取 ${result.data.items?.length || 0} 个模型。`);
+  setMessage("模型列表已更新");
+}
+
+async function checkAIProvider() {
+  const payload = collectAIConfigPayload();
+  const result = await request("/api/ai/check", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    loadingMessage: "正在检测 AI 连接...",
+    timeoutMs: 60000,
+  });
+  if (!result.ok) {
+    if (result.data?.status) {
+      aiConfigStatus.innerHTML = formatAIStatus(result.data.status, result.data.error || "AI 连接检测失败。");
+    }
+    return;
+  }
+  aiConfigStatus.innerHTML = formatAIStatus(result.data.status, "AI 连接检测通过。");
+  setMessage("AI 连接检测通过");
+}
+
+async function saveAIConfig() {
+  const payload = collectAIConfigPayload();
+  const result = await request("/api/ai/config", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+    loadingMessage: "正在保存 AI 配置...",
+  });
+  if (!result.ok) {
+    return;
+  }
+  aiConfigStatus.innerHTML = formatAIStatus(result.data.status, "AI 配置已保存并启用。");
+  setMessage("AI 配置已保存并启用");
+}
+
+function collectAIConfigPayload() {
+  const payload = Object.fromEntries(new FormData(aiConfigForm).entries());
+  const selectedModel = payload.model || "";
+  const manualModel = (payload.model_manual || "").trim();
+  return {
+    provider: payload.provider,
+    provider_name: payload.provider_name,
+    base_url: payload.base_url,
+    api_key: payload.api_key,
+    api_version: payload.api_version,
+    model: manualModel || selectedModel,
+  };
+}
+
+function setAIFormValue(name, value) {
+  if (aiConfigForm?.elements[name]) {
+    aiConfigForm.elements[name].value = value || "";
+  }
+}
+
+function setAIModelOptions(models, selected) {
+  if (!aiModelSelect) {
+    return;
+  }
+  const uniqueModels = [...new Set((models || []).filter(Boolean))];
+  if (selected && !uniqueModels.includes(selected)) {
+    uniqueModels.unshift(selected);
+  }
+  aiModelSelect.innerHTML = uniqueModels.length
+    ? uniqueModels.map((model) => `<option value="${escapeHTMLAttribute(model)}">${escapeHTML(model)}</option>`).join("")
+    : `<option value="">未获取到模型，可使用手动模型名</option>`;
+  aiModelSelect.value = selected && uniqueModels.includes(selected) ? selected : (uniqueModels[0] || "");
+}
+
+function applyAIProviderDefaults(provider) {
+  const defaults = {
+    openai: { name: "OpenAI", baseURL: "https://api.openai.com", model: "gpt-4o-mini", apiVersion: "" },
+    "openai-responses": { name: "OpenAI Responses", baseURL: "https://api.openai.com", model: "gpt-4o-mini", apiVersion: "" },
+    gemini: { name: "Gemini", baseURL: "https://generativelanguage.googleapis.com", model: "gemini-1.5-flash", apiVersion: "" },
+    anthropic: { name: "Anthropic", baseURL: "https://api.anthropic.com", model: "claude-3-5-haiku-latest", apiVersion: "" },
+    "azure-openai": { name: "Azure OpenAI", baseURL: "https://{resource}.openai.azure.com", model: "", apiVersion: "2024-10-21" },
+    "new-api": { name: "New API", baseURL: "", model: "gpt-4o-mini", apiVersion: "" },
+  };
+  const current = defaults[provider] || defaults.openai;
+  setAIFormValue("provider_name", current.name);
+  setAIFormValue("base_url", current.baseURL);
+  setAIFormValue("api_version", current.apiVersion);
+  setAIModelOptions(current.model ? [current.model] : [], current.model);
+  setAIFormValue("model_manual", "");
+}
+
+function formatAIStatus(status, message) {
+  if (!status) {
+    return escapeHTML(message || "-");
+  }
+  return `
+    <strong>${escapeHTML(message || "-")}</strong>
+    <div class="meta">供应商：${escapeHTML(status.provider_name || status.provider || "-")} · 类型：${escapeHTML(status.provider || "-")} · 模型：${escapeHTML(status.model || "-")}</div>
+    <div class="meta">调用地址：${escapeHTML(status.endpoint || "-")}</div>
+    <div class="meta">模型地址：${escapeHTML(status.models_endpoint || "-")}</div>
+  `;
 }
 
 document.getElementById("jlpt-form").addEventListener("submit", async (event) => {
@@ -271,8 +422,8 @@ openChallengeButton.addEventListener("click", async () => {
     setMessage("请先选择一篇文章");
     return;
   }
-  await loadChallengeQuestions(state.selectedArticleId);
   showView("challenge");
+  await loadChallengeQuestions(state.selectedArticleId);
 });
 
 openPostQuizButton.addEventListener("click", async () => {
@@ -280,8 +431,8 @@ openPostQuizButton.addEventListener("click", async () => {
     setMessage("请先选择一篇文章");
     return;
   }
-  await loadPostQuizQuestions(state.selectedArticleId);
   showView("post-quiz");
+  await loadPostQuizQuestions(state.selectedArticleId);
 });
 
 addVocabularyButton.addEventListener("click", async () => {
@@ -357,6 +508,52 @@ deleteVocabularyButton.addEventListener("click", async () => {
   vocabularyDetail.textContent = "请选择一个生词查看详情。";
   openVocabularyArticleButton.disabled = true;
   setMessage("生词已删除");
+});
+
+vocabularySelectAll?.addEventListener("change", () => {
+  const checked = vocabularySelectAll.checked;
+  document.querySelectorAll(".vocabulary-select-checkbox").forEach((checkbox) => {
+    checkbox.checked = checked;
+    const id = Number(checkbox.dataset.vocabularyId);
+    if (checked) {
+      state.selectedVocabularyIds.add(id);
+    } else {
+      state.selectedVocabularyIds.delete(id);
+    }
+  });
+  updateVocabularyBatchState();
+});
+
+batchMasterVocabularyButton?.addEventListener("click", async () => {
+  await batchUpdateVocabularyStatus("mastered", "熟练");
+});
+
+batchLearningVocabularyButton?.addEventListener("click", async () => {
+  await batchUpdateVocabularyStatus("learning", "学习中");
+});
+
+batchDeleteVocabularyButton?.addEventListener("click", async () => {
+  const ids = getSelectedVocabularyIds();
+  if (ids.length === 0) {
+    setMessage("请先选择要删除的生词");
+    return;
+  }
+  if (!window.confirm(`确定要删除选中的 ${ids.length} 个生词吗？`)) {
+    return;
+  }
+  const result = await request("/api/vocabulary/batch/delete", {
+    method: "POST",
+    body: JSON.stringify({ vocabulary_ids: ids }),
+    loadingMessage: "正在批量删除生词...",
+  });
+  if (!result.ok) {
+    return;
+  }
+  state.selectedVocabularyIds.clear();
+  state.selectedVocabularyId = null;
+  vocabularyDetail.textContent = "请选择一个生词查看详情。";
+  await loadVocabularyList();
+  setMessage(`已删除 ${result.data.deleted || 0} 个生词`);
 });
 
 openVocabularyArticleButton.addEventListener("click", async () => {
@@ -515,15 +712,38 @@ submitReviewAnswerButton.addEventListener("click", async () => {
 });
 
 nextReviewQuestionButton.addEventListener("click", () => {
-  if (state.review.currentIndex + 1 >= state.review.items.length) {
-    setMessage("词汇复习已完成");
+  moveToNextReviewQuestion();
+});
+
+masterReviewWordButton?.addEventListener("click", async () => {
+  const item = state.review.items[state.review.currentIndex];
+  if (!item) {
+    setMessage("当前没有可标记的复习词");
     return;
   }
-  state.review.currentIndex += 1;
+  const result = await request(`/api/vocabulary/${item.user_vocabulary.id}/status`, {
+    method: "PUT",
+    body: JSON.stringify({ status: "mastered" }),
+    loadingMessage: "正在标记熟练...",
+  });
+  if (!result.ok) {
+    return;
+  }
+  state.review.items.splice(state.review.currentIndex, 1);
+  if (state.review.currentIndex >= state.review.items.length) {
+    state.review.currentIndex = Math.max(0, state.review.items.length - 1);
+  }
   state.review.selectedOption = "";
   state.review.answered = false;
   reviewFeedback.classList.add("hidden");
   reviewFeedback.textContent = "";
+  await loadVocabularyList();
+  setMessage("已标记熟练，后续复习会跳过这个词");
+  if (state.review.items.length === 0) {
+    reviewHeader.textContent = "今日复习完成，熟练词已移出复习队列。";
+    reviewCard.classList.add("hidden");
+    return;
+  }
   renderReviewQuestion();
 });
 
@@ -872,9 +1092,12 @@ async function loadReadingArticle(articleId) {
 
 async function loadChallengeQuestions(articleId) {
   challengeHeader.textContent = "正在生成或加载挑战阅读题...";
+  challengeLoading?.classList.remove("hidden");
   challengeCard.classList.add("hidden");
   const result = await request(`/api/reading/articles/${articleId}/challenge-questions`, { timeoutMs: 60000 });
+  challengeLoading?.classList.add("hidden");
   if (!result.ok) {
+    challengeHeader.textContent = "挑战阅读题加载失败，请检查 AI 配置或稍后重试。";
     return;
   }
 
@@ -1080,6 +1303,74 @@ function renderReviewQuestion() {
 
   submitReviewAnswerButton.disabled = state.review.answered;
   nextReviewQuestionButton.disabled = !state.review.answered;
+  masterReviewWordButton.disabled = false;
+}
+
+function moveToNextReviewQuestion() {
+  if (state.review.currentIndex + 1 >= state.review.items.length) {
+    setMessage("词汇复习已完成");
+    return;
+  }
+  state.review.currentIndex += 1;
+  state.review.selectedOption = "";
+  state.review.answered = false;
+  reviewFeedback.classList.add("hidden");
+  reviewFeedback.textContent = "";
+  renderReviewQuestion();
+}
+
+async function batchUpdateVocabularyStatus(status, label) {
+  const ids = getSelectedVocabularyIds();
+  if (ids.length === 0) {
+    setMessage("请先选择要操作的生词");
+    return;
+  }
+  const result = await request("/api/vocabulary/batch/status", {
+    method: "POST",
+    body: JSON.stringify({ vocabulary_ids: ids, status }),
+    loadingMessage: `正在批量标记为${label}...`,
+  });
+  if (!result.ok) {
+    return;
+  }
+  state.selectedVocabularyIds.clear();
+  await loadVocabularyList();
+  if (state.selectedVocabularyId) {
+    await loadVocabularyDetail(state.selectedVocabularyId).catch(() => {});
+  }
+  setMessage(`已将 ${result.data.updated || 0} 个生词标记为${label}`);
+}
+
+function getSelectedVocabularyIds() {
+  return [...state.selectedVocabularyIds].filter((id) => Number.isFinite(id) && id > 0);
+}
+
+function updateVocabularyBatchState() {
+  const count = state.selectedVocabularyIds.size;
+  if (vocabularySelectedCount) {
+    vocabularySelectedCount.textContent = `已选择 ${count} 个`;
+  }
+  [batchMasterVocabularyButton, batchLearningVocabularyButton, batchDeleteVocabularyButton].forEach((button) => {
+    if (button) {
+      button.disabled = count === 0;
+    }
+  });
+  if (vocabularySelectAll) {
+    const checkboxes = [...document.querySelectorAll(".vocabulary-select-checkbox")];
+    vocabularySelectAll.checked = checkboxes.length > 0 && checkboxes.every((checkbox) => checkbox.checked);
+    vocabularySelectAll.indeterminate = checkboxes.some((checkbox) => checkbox.checked) && !vocabularySelectAll.checked;
+  }
+}
+
+function vocabularyStatusLabel(status) {
+  const labels = {
+    new: "新词",
+    learning: "学习中",
+    reviewing: "复习中",
+    mastered: "熟练",
+    ignored: "忽略",
+  };
+  return escapeHTML(labels[status] || status || "-");
 }
 
 async function loadVocabularyList() {
@@ -1091,6 +1382,8 @@ async function loadVocabularyList() {
   }
 
   const items = result.data.items || [];
+  state.selectedVocabularyIds = new Set([...state.selectedVocabularyIds].filter((id) => items.some((detail) => detail.item.id === id)));
+  updateVocabularyBatchState();
   if (items.length === 0) {
     vocabularyList.innerHTML = `<li class="empty-state">当前筛选下没有生词。阅读文章时框选词语即可加入。</li>`;
     return;
@@ -1099,12 +1392,17 @@ async function loadVocabularyList() {
     .map(
       (detail) => `
         <li>
-          <button class="link-button vocabulary-item" data-vocabulary-id="${detail.item.id}">
-            <span><strong class="vocab-surface">${escapeHTML(detail.dictionary_entry.surface)}</strong> <span class="tag status-${escapeHTML(detail.item.status)}">${escapeHTML(detail.item.status)}</span></span>
-            <span class="meta">${escapeHTML(detail.dictionary_entry.reading || "-")} · ${escapeHTML(detail.dictionary_entry.romaji || "-")} · ${escapeHTML(detail.dictionary_entry.jlpt_level)}</span>
-            <span>${escapeHTML(detail.dictionary_entry.primary_meaning_zh)}</span>
-            <span class="meta">${escapeHTML(detail.example_sentence || detail.item.source_sentence_text || "-")}</span>
-          </button>
+          <div class="vocabulary-row">
+            <label class="vocabulary-check">
+              <input class="vocabulary-select-checkbox" type="checkbox" data-vocabulary-id="${detail.item.id}" ${state.selectedVocabularyIds.has(detail.item.id) ? "checked" : ""} />
+            </label>
+            <button class="link-button vocabulary-item" data-vocabulary-id="${detail.item.id}">
+              <span><strong class="vocab-surface">${escapeHTML(detail.dictionary_entry.surface)}</strong> <span class="tag status-${escapeHTML(detail.item.status)}">${vocabularyStatusLabel(detail.item.status)}</span></span>
+              <span class="meta">${escapeHTML(detail.dictionary_entry.reading || "-")} · ${escapeHTML(detail.dictionary_entry.romaji || "-")} · ${escapeHTML(detail.dictionary_entry.jlpt_level)}</span>
+              <span>${escapeHTML(detail.dictionary_entry.primary_meaning_zh)}</span>
+              <span class="meta">${escapeHTML(detail.example_sentence || detail.item.source_sentence_text || "-")}</span>
+            </button>
+          </div>
         </li>
       `,
     )
@@ -1116,6 +1414,18 @@ async function loadVocabularyList() {
       await loadVocabularyDetail(vocabularyId);
     });
   });
+  vocabularyList.querySelectorAll(".vocabulary-select-checkbox").forEach((checkbox) => {
+    checkbox.addEventListener("change", () => {
+      const id = Number(checkbox.dataset.vocabularyId);
+      if (checkbox.checked) {
+        state.selectedVocabularyIds.add(id);
+      } else {
+        state.selectedVocabularyIds.delete(id);
+      }
+      updateVocabularyBatchState();
+    });
+  });
+  updateVocabularyBatchState();
 }
 
 async function loadVocabularyDetail(vocabularyId) {

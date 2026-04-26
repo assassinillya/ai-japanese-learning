@@ -52,7 +52,7 @@
 - 新手引导页面和完成引导接口 `POST /api/profile/onboarding/complete`
 - 基础学习统计接口 `GET /api/stats/learning`
 - 统计概览页面：文章、生词、待复习、阅读答题、复习记录
-- 可配置 AI provider 接口，支持 OpenAI-compatible Chat Completions
+- 可配置 AI provider 接口，支持 OpenAI、OpenAI Responses、Gemini、Anthropic、Azure OpenAI 和 New API
 - AI Prompt 模板：词典生成、文章翻译、挑战阅读、阅读后测验、词汇复习
 - 词典生成、文章翻译、词汇复习题已可优先调用真实 AI，失败时降级到占位生成
 - 前端基础加载状态、错误提示、空状态和查词防重复请求
@@ -136,6 +136,18 @@
   - 阅读、挑战阅读和阅读后测验的鼠标划词弹窗改为先查本地词典，未命中再调用 `POST /api/dictionary/generate`。
   - AI 生成成功后词条会入库并立即显示原形、读音、罗马音、词性、JLPT、中文释义和保存例句，再可加入生词本。
   - 保留旧 `/api/dictionary/lookup` 的查不到即生成行为，兼容已有调用。
+- `v1.2-ai-provider-console`
+  - AI 接入从单一 OpenAI-compatible 扩展为 OpenAI、OpenAI Responses、Gemini、Anthropic、Azure OpenAI 和 New API。
+  - 新增 `GET /api/ai/providers`、`GET /api/ai/config`、`PUT /api/ai/config`、`POST /api/ai/models`、`POST /api/ai/check`。
+  - 个人中心支持供应商名称、API Key、API 地址、API Version、模型列表获取、模型选择、连接检测和保存启用。
+  - 后端会按供应商类型自动补齐调用 endpoint 和模型列表 endpoint，用户输入 `/v1` 或完整 endpoint 时不会重复追加后缀。
+  - 保存后的 AI 配置会在当前服务进程内即时生效，环境变量仍可作为启动默认值。
+- `v1.2-study-flow-polish`
+  - 进入挑战阅读时先切到挑战页并展示加载卡片，避免 AI 生成期间页面无反馈。
+  - 生词本新增批量选择、批量删除、批量标记学习中、批量标记熟练。
+  - `mastered` 状态明确作为“熟练/已经学会”，熟练词会从后续待复习队列中移出。
+  - 词汇复习卡新增“标记熟练”按钮，点击后当前词直接移出复习队列并跳到下一词。
+  - 新增 `POST /api/vocabulary/batch/status` 和 `POST /api/vocabulary/batch/delete`。
 
 后续每次功能或结构改动，都需要同步更新 `README.md` 的版本记录和当前说明。
 
@@ -189,9 +201,11 @@ postgres://postgres:<password>@localhost:5432/japanese_learning?sslmode=disable
 - `SERVER_ADDRESS`
 - `PORT`
 - `AI_PROVIDER`
+- `AI_PROVIDER_NAME`
 - `AI_BASE_URL`
 - `AI_API_KEY`
 - `AI_MODEL`
+- `AI_API_VERSION`
 
 AI 配置说明：
 
@@ -201,14 +215,27 @@ AI_PROVIDER=placeholder
 
 默认不调用外部 AI，继续使用项目内置占位生成器。
 
-如需接入 OpenAI-compatible Chat Completions：
+支持的 `AI_PROVIDER`：
+
+- `openai`
+- `openai-responses`
+- `gemini`
+- `anthropic`
+- `azure-openai`
+- `new-api`
+- `placeholder`
+
+如需接入 OpenAI Responses：
 
 ```text
-AI_PROVIDER=openai-compatible
-AI_BASE_URL=https://api.openai.com/v1
+AI_PROVIDER=openai-responses
+AI_PROVIDER_NAME=OpenAI
+AI_BASE_URL=https://api.openai.com
 AI_API_KEY=<your-api-key>
 AI_MODEL=gpt-4o-mini
 ```
+
+如果 `AI_BASE_URL` 已经包含 `/v1` 或完整 endpoint，后端会按供应商类型自动补齐缺失部分并避免重复追加。例如 OpenAI Responses 输入 `https://api.openai.com`、`https://api.openai.com/v1` 或 `https://api.openai.com/v1/responses` 都会被规范化到对应调用地址。Azure OpenAI 可额外设置 `AI_API_VERSION`。
 
 ## 数据库初始化
 
@@ -304,7 +331,7 @@ docker compose up --build
 - `v0.9` 仍是单体 MVP 形态，部署配置只负责启动应用和 PostgreSQL；迁移执行仍保留为显式步骤，避免应用启动时自动改库。
 - `v1.0` 仍沿用当前占位 AI 生成器；真实 AI 服务商、通用 JSON Schema 校验和自动重试队列尚未接入。
 - `v1.1` 完成新手路径和基础统计，但仍未接入真实 AI 服务商、通用 JSON Schema 校验、AI 自动重试队列、文章标签、错题本和生产级自动迁移。
-- `v1.2` 已具备 OpenAI-compatible AI 接口和 Prompt 模板；真实 AI 调用依赖环境变量配置。挑战阅读和阅读后测验 Prompt 已准备好，但当前生成仍优先使用稳定的本地占位算法，后续可继续切换为 AI 题目生成。
+- `v1.2` 已具备多供应商 AI 接口和 Prompt 模板；真实 AI 调用可通过环境变量或个人中心配置启用。
 
 ## v0.5 Review 记录
 
@@ -424,7 +451,7 @@ docker compose up --build
 - `node --check internal/web/assets/app.js` 通过。
 - 未配置 `AI_API_KEY` 时，词典生成、文章翻译、词汇复习仍可走占位 fallback。
 - `GET /api/health` 返回 `version = v1.2`。
-- `AI_PROVIDER=openai-compatible` 时会通过 OpenAI-compatible Chat Completions 接口请求 JSON 输出。
+- 配置真实 AI provider 后会通过对应供应商接口请求 JSON 输出。
 
 ## v1.2 前端重构验证记录
 
@@ -448,3 +475,26 @@ docker compose up --build
 - `GOCACHE=D:\project\ai-japanese-learning\.gocache go test ./...` 通过。
 - `go build -o .\tmp\ai-japanese-learning.exe .\cmd\server` 通过。
 - 本地烟测 `GET /api/dictionary/search` 首次返回 `found=false`，随后 `POST /api/dictionary/generate` 返回 `generated=true`，再次 `GET /api/dictionary/search` 返回 `found=true` 且 entry id 一致。
+
+## v1.2 AI 供应商控制台验证记录
+
+本轮重做 AI 接入配置能力，补齐多供应商、模型列表、连接检测和 endpoint 自动规范化。
+
+已验证：
+
+- `node --check internal/web/assets/app.js` 通过。
+- `GOCACHE=D:\project\ai-japanese-learning\.gocache go test ./...` 通过。
+- `GET /api/ai/providers` 可返回 OpenAI、OpenAI Responses、Gemini、Anthropic、Azure OpenAI 和 New API 定义。
+- `GET /api/ai/config` 可返回当前脱敏配置和规范化后的调用地址、模型地址。
+- `PUT /api/ai/config` 可在当前服务进程内保存并启用 AI 配置。
+
+## v1.2 学习流程体验验证记录
+
+本轮补齐挑战阅读加载反馈、生词本批量操作和复习中标记熟练。
+
+已验证：
+
+- `node --check internal/web/assets/app.js` 通过。
+- `GOCACHE=D:\project\ai-japanese-learning\.gocache go test ./...` 通过。
+- 熟练状态 `mastered` 已从 `GET /api/review/due` 的待复习查询中排除。
+- 生词本批量接口 `POST /api/vocabulary/batch/status`、`POST /api/vocabulary/batch/delete` 可按当前用户限制批量操作。

@@ -30,11 +30,17 @@ func New(cfg *config.Config) (*App, error) {
 	reviewRepo := repository.NewReviewRepository(postgres)
 	aiRepo := repository.NewAIRepository(postgres)
 	statsRepo := repository.NewStatsRepository(postgres)
-	aiProvider := service.NewAIProvider(cfg.AI.Provider, cfg.AI.BaseURL, cfg.AI.APIKey, cfg.AI.Model)
 	authService := service.NewAuthService(userRepo, cfg.TokenSecret)
 	profileService := service.NewProfileService(userRepo)
 	languageService := service.NewLanguageService()
-	aiService := service.NewAIService(aiRepo, aiProvider)
+	aiService := service.NewConfiguredAIService(aiRepo, service.AIProviderConfig{
+		Provider:     cfg.AI.Provider,
+		ProviderName: cfg.AI.ProviderName,
+		BaseURL:      cfg.AI.BaseURL,
+		APIKey:       cfg.AI.APIKey,
+		Model:        cfg.AI.Model,
+		APIVersion:   cfg.AI.APIVersion,
+	})
 	translationService := service.NewTranslationService(aiService)
 	articleService := service.NewArticleService(articleRepo, languageService, translationService)
 	dictionaryService := service.NewDictionaryService(dictionaryRepo, aiService)
@@ -52,6 +58,7 @@ func New(cfg *config.Config) (*App, error) {
 		challengeService,
 		reviewService,
 		statsService,
+		aiService,
 		web.NewStaticServer(),
 	)
 

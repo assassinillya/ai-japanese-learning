@@ -217,6 +217,11 @@
 
         <section class="view" id="view-challenge">
           <header class="page-header"><div><h2 class="page-title">挑战阅读</h2><p id="challenge-header" class="page-subtitle">请选择一篇文章开始挑战阅读。</p></div></header>
+          <div id="challenge-loading" class="loading-card hidden">
+            <span class="loading-spinner"></span>
+            <strong>正在准备挑战阅读题</strong>
+            <p class="muted">系统正在读取文章并生成题目，AI 生成可能需要几十秒。</p>
+          </div>
           <div id="challenge-card" class="challenge-card card hidden">
             <div id="challenge-progress" class="progress-label">第 0 / 0 题</div>
             <div class="progress-bar"><span></span></div>
@@ -266,6 +271,13 @@
                 </label>
                 <button class="btn btn-secondary" type="submit">筛选</button>
               </form>
+              <div class="batch-toolbar">
+                <label class="check-row"><input type="checkbox" id="vocabulary-select-all" /> 全选当前列表</label>
+                <span id="vocabulary-selected-count" class="meta">已选择 0 个</span>
+                <button class="btn btn-secondary compact" id="batch-master-vocabulary-button" type="button">批量标记熟练</button>
+                <button class="btn btn-ghost compact" id="batch-learning-vocabulary-button" type="button">批量标记学习中</button>
+                <button class="btn btn-danger compact" id="batch-delete-vocabulary-button" type="button">批量删除</button>
+              </div>
               <ul id="vocabulary-list" class="list vocabulary-list"></ul>
             </div>
             <div class="card">
@@ -297,6 +309,7 @@
             <div id="review-feedback" class="summary hidden"></div>
             <div class="detail-actions center">
               <button id="submit-review-answer-button" class="btn btn-primary">提交答案</button>
+              <button id="master-review-word-button" class="btn btn-ghost">标记熟练</button>
               <button id="next-review-question-button" class="btn btn-secondary">下一词</button>
             </div>
           </div>
@@ -340,15 +353,37 @@
             </div>
             <div class="card">
               <h3>AI 接入</h3>
-              <p class="muted">挑战阅读和阅读后测验需要 OpenAI-compatible Chat Completions。当前后端从环境变量读取 AI 配置；这里用于记录接入参数和提示启动配置。</p>
+              <p class="muted">支持 OpenAI、OpenAI Responses、Gemini、Anthropic、Azure OpenAI 和 New API。保存后当前服务进程会立即使用所选供应商。</p>
               <form id="ai-config-form">
-                <label>Provider <input class="input" name="provider" value="openai-compatible" /></label>
-                <label>Base URL <input class="input" name="base_url" placeholder="https://api.openai.com/v1" /></label>
-                <label>API Key <input class="input" name="api_key" type="password" placeholder="sk-..." /></label>
-                <label>Model <input class="input" name="model" placeholder="gpt-4o-mini" /></label>
-                <button class="btn btn-secondary" type="submit">保存接入参数</button>
+                <label>
+                  供应商类型
+                  <select class="input" name="provider" id="ai-provider-select">
+                    <option value="openai">OpenAI</option>
+                    <option value="openai-responses">OpenAI Responses</option>
+                    <option value="gemini">Gemini</option>
+                    <option value="anthropic">Anthropic</option>
+                    <option value="azure-openai">Azure OpenAI</option>
+                    <option value="new-api">New API</option>
+                  </select>
+                </label>
+                <label>供应商名称 <input class="input" name="provider_name" placeholder="例如 OpenAI / 公司代理 / New API" /></label>
+                <label>API 地址 <input class="input" name="base_url" placeholder="https://api.openai.com 或 https://api.openai.com/v1" /></label>
+                <label>API Key <input class="input" name="api_key" type="password" placeholder="sk-..." autocomplete="off" /></label>
+                <label>API Version <input class="input" name="api_version" placeholder="Azure 可填，例如 2024-10-21" /></label>
+                <label>
+                  模型
+                  <select class="input" name="model" id="ai-model-select">
+                    <option value="">先获取模型列表，或手动输入后保存</option>
+                  </select>
+                </label>
+                <label>手动模型名 <input class="input" name="model_manual" placeholder="模型列表不可用时填写，例如 gpt-4o-mini" /></label>
+                <div class="detail-actions">
+                  <button class="btn btn-secondary" type="button" id="ai-load-models-button">获取模型列表</button>
+                  <button class="btn btn-ghost" type="button" id="ai-check-button">检测连接</button>
+                  <button class="btn btn-primary" type="submit">保存并启用</button>
+                </div>
               </form>
-              <p class="meta">要让后端实际调用 AI，请用同样参数设置 AI_PROVIDER、AI_BASE_URL、AI_API_KEY、AI_MODEL 后重启服务。</p>
+              <div id="ai-config-status" class="summary ai-config-status">尚未加载 AI 配置。</div>
             </div>
           </div>
         </section>

@@ -25,6 +25,7 @@ type Router struct {
 	challengeService  *service.ChallengeService
 	reviewService     *service.ReviewService
 	statsService      *service.StatsService
+	aiService         *service.AIService
 }
 
 type staticServer interface {
@@ -40,6 +41,7 @@ func NewRouter(
 	challengeService *service.ChallengeService,
 	reviewService *service.ReviewService,
 	statsService *service.StatsService,
+	aiService *service.AIService,
 	static staticServer,
 ) *Router {
 	r := &Router{
@@ -52,6 +54,7 @@ func NewRouter(
 		challengeService:  challengeService,
 		reviewService:     reviewService,
 		statsService:      statsService,
+		aiService:         aiService,
 	}
 
 	r.mux.Handle("/assets/", http.StripPrefix("/assets/", static.Handler()))
@@ -85,6 +88,8 @@ func NewRouter(
 	r.mux.HandleFunc("GET /api/dictionary/{id}", r.withAuth(r.handleDictionaryDetail))
 	r.mux.HandleFunc("GET /api/vocabulary", r.withAuth(r.handleListVocabulary))
 	r.mux.HandleFunc("POST /api/vocabulary", r.withAuth(r.handleCreateVocabulary))
+	r.mux.HandleFunc("POST /api/vocabulary/batch/status", r.withAuth(r.handleBatchUpdateVocabularyStatus))
+	r.mux.HandleFunc("POST /api/vocabulary/batch/delete", r.withAuth(r.handleBatchDeleteVocabulary))
 	r.mux.HandleFunc("GET /api/vocabulary/check", r.withAuth(r.handleVocabularyCheck))
 	r.mux.HandleFunc("GET /api/vocabulary/{id}", r.withAuth(r.handleVocabularyDetail))
 	r.mux.HandleFunc("GET /api/vocabulary/{id}/context", r.withAuth(r.handleVocabularyContext))
@@ -95,6 +100,11 @@ func NewRouter(
 	r.mux.HandleFunc("POST /api/review/answer", r.withAuth(r.handleReviewAnswer))
 	r.mux.HandleFunc("GET /api/review/records", r.withAuth(r.handleReviewRecords))
 	r.mux.HandleFunc("GET /api/stats/learning", r.withAuth(r.handleLearningStats))
+	r.mux.HandleFunc("GET /api/ai/providers", r.withAuth(r.handleAIProviders))
+	r.mux.HandleFunc("GET /api/ai/config", r.withAuth(r.handleAIConfig))
+	r.mux.HandleFunc("PUT /api/ai/config", r.withAuth(r.handleAIConfigUpdate))
+	r.mux.HandleFunc("POST /api/ai/models", r.withAuth(r.handleAIModels))
+	r.mux.HandleFunc("POST /api/ai/check", r.withAuth(r.handleAICheck))
 
 	return r
 }

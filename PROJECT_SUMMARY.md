@@ -84,6 +84,7 @@
 - 生词状态筛选。
 - 修改生词状态。
 - 删除生词。
+- 批量删除、批量标记学习中、批量标记熟练。
 - 打开来源文章。
 - 生词会保存上下文，包括来源文章、来源句子、用户当时框选文本。
 - 同一用户重复添加同一词时不会重复创建，必要时会刷新上下文。
@@ -97,6 +98,8 @@ reviewing
 mastered
 ignored
 ```
+
+`mastered` 表示熟练/已经学会，后续不会出现在今日待复习队列中。
 
 ### 挑战阅读
 
@@ -126,6 +129,7 @@ ignored
 - 复习题来自用户自己的生词本。
 - 正确答案来自词典 `primary_meaning_zh`。
 - 答题后保存复习记录。
+- 复习中可直接标记熟练，标记后当前词会移出本轮复习并跳到下一词。
 - 答题后更新：
   - 状态
   - 熟练度
@@ -169,7 +173,9 @@ GET /api/stats/learning
 - AI 缓存表：`ai_cache`。
 - AI 调用日志表：`ai_logs`。
 - 可配置 AI provider 接口。
-- 支持 OpenAI-compatible Chat Completions。
+- 支持 OpenAI、OpenAI Responses、Gemini、Anthropic、Azure OpenAI 和 New API。
+- 个人中心可填写供应商名称、API 地址、API Key、API Version，并获取模型列表、选择模型、检测连接、保存启用。
+- 后端会按供应商类型自动补齐调用 endpoint 和模型列表 endpoint，输入 `/v1` 或完整 endpoint 时不会重复追加后缀。
 - 未配置 `AI_API_KEY` 时，继续使用本地占位生成器。
 - 已提供 Prompt 模板：
   - 词典生成。
@@ -350,9 +356,11 @@ APP_TOKEN_SECRET
 SERVER_ADDRESS
 PORT
 AI_PROVIDER
+AI_PROVIDER_NAME
 AI_BASE_URL
 AI_API_KEY
 AI_MODEL
+AI_API_VERSION
 ```
 
 默认 AI 配置为：
@@ -361,11 +369,12 @@ AI_MODEL
 AI_PROVIDER=placeholder
 ```
 
-接入 OpenAI-compatible 服务时：
+接入 OpenAI Responses 时：
 
 ```text
-AI_PROVIDER=openai-compatible
-AI_BASE_URL=https://api.openai.com/v1
+AI_PROVIDER=openai-responses
+AI_PROVIDER_NAME=OpenAI
+AI_BASE_URL=https://api.openai.com
 AI_API_KEY=<your-api-key>
 AI_MODEL=gpt-4o-mini
 ```
@@ -408,7 +417,7 @@ docker compose up --build
 
 当前项目仍保留以下后续增强项：
 
-- 已具备 OpenAI-compatible AI 接口，但真实调用需要配置环境变量。
+- 已具备多供应商 AI 接口，真实调用可通过环境变量或个人中心配置启用。
 - 挑战阅读和阅读后测验 Prompt 已准备好，但当前生成路径仍以稳定的本地占位算法为主。
 - 尚未实现通用 JSON Schema 校验层。
 - 尚未实现 AI 失败自动重试队列。

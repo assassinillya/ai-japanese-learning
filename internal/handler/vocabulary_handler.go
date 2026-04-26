@@ -21,6 +21,15 @@ type updateVocabularyStatusRequest struct {
 	Status model.VocabularyStatus `json:"status"`
 }
 
+type batchVocabularyStatusRequest struct {
+	VocabularyIDs []int64                `json:"vocabulary_ids"`
+	Status        model.VocabularyStatus `json:"status"`
+}
+
+type batchVocabularyDeleteRequest struct {
+	VocabularyIDs []int64 `json:"vocabulary_ids"`
+}
+
 func (r *Router) handleListVocabulary(w http.ResponseWriter, req *http.Request) {
 	user, err := currentUser(req.Context())
 	if err != nil {
@@ -174,6 +183,27 @@ func (r *Router) handleUpdateVocabularyStatus(w http.ResponseWriter, req *http.R
 	writeJSON(w, http.StatusOK, item)
 }
 
+func (r *Router) handleBatchUpdateVocabularyStatus(w http.ResponseWriter, req *http.Request) {
+	user, err := currentUser(req.Context())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	var input batchVocabularyStatusRequest
+	if err := json.NewDecoder(req.Body).Decode(&input); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	updated, err := r.vocabularyService.UpdateStatusBatch(req.Context(), user.ID, input.VocabularyIDs, input.Status)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"updated": updated})
+}
+
 func (r *Router) handleDeleteVocabulary(w http.ResponseWriter, req *http.Request) {
 	user, err := currentUser(req.Context())
 	if err != nil {
@@ -192,6 +222,27 @@ func (r *Router) handleDeleteVocabulary(w http.ResponseWriter, req *http.Request
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"deleted": true})
+}
+
+func (r *Router) handleBatchDeleteVocabulary(w http.ResponseWriter, req *http.Request) {
+	user, err := currentUser(req.Context())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	var input batchVocabularyDeleteRequest
+	if err := json.NewDecoder(req.Body).Decode(&input); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	deleted, err := r.vocabularyService.DeleteBatch(req.Context(), user.ID, input.VocabularyIDs)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"deleted": deleted})
 }
 
 func vocabularyIDFromPath(path string) (int64, error) {
