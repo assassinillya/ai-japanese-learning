@@ -72,7 +72,7 @@ func (s *ReviewService) GetOrCreateQuestion(ctx context.Context, entry model.Dic
 	fallbackModel := "placeholder-vocabulary-review-generator"
 	aiModel := fallbackModel
 	if s.aiService != nil {
-		aiModel = s.aiService.ModelName(fallbackModel)
+		aiModel = s.aiService.ModelNameFor(ctx, fallbackModel)
 	}
 	promptVersion := aiPromptVersionV12
 	taskType := "vocabulary_review_question"
@@ -246,7 +246,7 @@ type reviewQuestionCacheRequest struct {
 }
 
 func (s *ReviewService) generateReviewQuestionWithAI(ctx context.Context, entry model.DictionaryEntry, prompt AIPrompt) (*model.VocabularyReviewQuestion, error) {
-	if s.aiService == nil || !s.aiService.ProviderAvailable() {
+	if s.aiService == nil || !s.aiService.ProviderAvailableFor(ctx) {
 		return nil, fmt.Errorf("ai provider unavailable")
 	}
 	raw, err := s.aiService.CompleteJSON(ctx, prompt)

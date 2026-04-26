@@ -63,6 +63,8 @@
 - 公共文章库：处理完成的本地文章可被其他用户直接阅读学习
 - 查词弹窗可拖动，并根据屏幕上下空间动态定位
 - 生词详情 AI 例句管理：最多 3 句，可生成和删除
+- AI 接入配置保存到用户账号，登录后该用户请求会默认使用自己的 AI 配置
+- 词典新增变形词索引，划到变形词时会归并到原型词条并保存隐藏映射
 
 ## 版本记录
 
@@ -158,6 +160,10 @@
   - 挑战阅读、阅读后测验继续复用按文章入库的公共题目缓存；词汇复习继续复用按词典条目入库的公共复习题缓存。
   - 生词详情新增 AI 例句管理：每次生成 1 句，最多 3 句，可删除后继续生成。
   - 新增 `GET /api/articles/public`、`GET /api/dictionary/{id}/examples`、`POST /api/dictionary/examples/generate`、`DELETE /api/dictionary/examples/{id}`。
+  - 新增用户级 AI 配置持久化，`PUT /api/ai/config` 保存到当前账号，登录后的 AI 调用默认使用该账号配置。
+  - 新增 `dictionary_forms` 变形词索引，AI 生成词条时以 lemma/原型入库，用户划到变形词时后续可直接命中原型词条。
+  - 阅读页“返回文章”回到文章库；浏览器/鼠标返回键在 SPA 内回到上一个页面状态。
+  - 生词本列表改为更紧凑布局，减少词条内部元素与左侧边界的空隙。
 
 后续每次功能或结构改动，都需要同步更新 `README.md` 的版本记录和当前说明。
 
@@ -519,3 +525,4 @@ docker compose up --build
 - `GOCACHE=D:\project\ai-japanese-learning\.gocache go test ./...` 通过。
 - 本地烟测上传文章后 `GET /api/articles/public` 可返回公共文章。
 - 本地烟测 `POST /api/dictionary/examples/generate` 可生成 1 条例句，`GET /api/dictionary/{id}/examples` 可查询，`DELETE /api/dictionary/examples/{id}` 可删除。
+- 本地烟测 `PUT /api/ai/config` 后重新 `GET /api/ai/config` 可返回当前用户保存的供应商、模型和规范化 endpoint。

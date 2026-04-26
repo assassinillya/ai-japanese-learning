@@ -19,6 +19,21 @@ type AIService struct {
 	provider AIProvider
 }
 
+type aiContextKey struct{}
+
+func ContextWithAIProviderConfig(ctx context.Context, cfg AIProviderConfig) context.Context {
+	cfg = NormalizeAIProviderConfig(cfg)
+	if NewAIProviderFromConfig(cfg) == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, aiContextKey{}, cfg)
+}
+
+func aiProviderConfigFromContext(ctx context.Context) (AIProviderConfig, bool) {
+	cfg, ok := ctx.Value(aiContextKey{}).(AIProviderConfig)
+	return cfg, ok
+}
+
 func NewAIService(aiRepo *repository.AIRepository, provider AIProvider) *AIService {
 	return &AIService{
 		aiRepo:   aiRepo,
@@ -42,6 +57,10 @@ func (s *AIService) CurrentStatus() AIProviderStatus {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return SanitizedAIProviderStatus(s.config, s.provider)
+}
+
+func (s *AIService) StatusForConfig(cfg AIProviderConfig) AIProviderStatus {
+	return SanitizedAIProviderStatus(cfg, NewAIProviderFromConfig(cfg))
 }
 
 func (s *AIService) ConfigureProvider(cfg AIProviderConfig) (AIProviderStatus, error) {
@@ -87,6 +106,13 @@ func (s *AIService) currentProvider() AIProvider {
 	return s.provider
 }
 
+func (s *AIService) providerForContext(ctx context.Context) AIProvider {
+	if cfg, ok := aiProviderConfigFromContext(ctx); ok {
+		return NewAIProviderFromConfig(cfg)
+	}
+	return s.currentProvider()
+}
+
 func (s *AIService) CacheKey(taskType, inputHash, modelName, promptVersion string) string {
 	return fmt.Sprintf("%s:%s:%s:%s", taskType, modelName, promptVersion, inputHash)
 }
@@ -100,6 +126,10 @@ func (s *AIService) ProviderAvailable() bool {
 	return s != nil && s.currentProvider() != nil
 }
 
+func (s *AIService) ProviderAvailableFor(ctx context.Context) bool {
+	return s != nil && s.providerForContext(ctx) != nil
+}
+
 func (s *AIService) ModelName(fallback string) string {
 	provider := s.currentProvider()
 	if provider != nil && provider.ModelName() != "" {
@@ -108,8 +138,16 @@ func (s *AIService) ModelName(fallback string) string {
 	return fallback
 }
 
+func (s *AIService) ModelNameFor(ctx context.Context, fallback string) string {
+	provider := s.providerForContext(ctx)
+	if provider != nil && provider.ModelName() != "" {
+		return provider.ModelName()
+	}
+	return fallback
+}
+
 func (s *AIService) CompleteJSON(ctx context.Context, prompt AIPrompt) (string, error) {
-	provider := s.currentProvider()
+	provider := s.providerForContext(ctx)
 	if provider == nil {
 		return "", fmt.Errorf("ai provider is not configured")
 	}

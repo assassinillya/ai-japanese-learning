@@ -61,9 +61,18 @@ func (s *DictionaryService) LookupOrGenerate(ctx context.Context, text string) (
 	if err != nil {
 		return nil, false, err
 	}
+	originalForm := text
+	if strings.TrimSpace(generated.Lemma) != "" {
+		generated.Surface = strings.TrimSpace(generated.Lemma)
+	}
 	created, err := s.dictionaryRepo.Create(ctx, generated)
 	if err != nil {
 		return nil, false, err
+	}
+	if originalForm != created.Surface && originalForm != created.Lemma {
+		if err := s.dictionaryRepo.CreateForm(ctx, created.ID, originalForm); err != nil {
+			return nil, false, err
+		}
 	}
 	return created, true, nil
 }
@@ -100,8 +109,8 @@ func (s *DictionaryService) GenerateExample(ctx context.Context, entryID int64) 
 	modelName := fallbackModel
 	source := "ai"
 	var parsed dictionaryExampleAIResponse
-	if s.aiService != nil && s.aiService.ProviderAvailable() {
-		modelName = s.aiService.ModelName(fallbackModel)
+	if s.aiService != nil && s.aiService.ProviderAvailableFor(ctx) {
+		modelName = s.aiService.ModelNameFor(ctx, fallbackModel)
 		prompt := promptDictionaryExample(*entry, existing)
 		request := map[string]any{"entry_id": entryID, "existing_count": len(existing), "prompt": prompt}
 		raw, err := s.aiService.CompleteJSON(ctx, prompt)
@@ -148,7 +157,7 @@ func (s *DictionaryService) generateDictionaryEntry(ctx context.Context, text st
 		fallbackModel = "placeholder-dictionary-generator"
 		promptVersion = aiPromptVersionV12
 	)
-	modelName := s.aiService.ModelName(fallbackModel)
+	modelName := s.aiService.ModelNameFor(ctx, fallbackModel)
 	prompt := promptDictionaryEntry(text)
 	request := map[string]any{
 		"text":           text,
@@ -198,7 +207,7 @@ func (s *DictionaryService) generateDictionaryEntry(ctx context.Context, text st
 }
 
 func (s *DictionaryService) generateDictionaryEntryWithAI(ctx context.Context, text string, prompt AIPrompt, taskType string, request any, modelName, promptVersion string) (*model.DictionaryEntry, error) {
-	if !s.aiService.ProviderAvailable() {
+	if !s.aiService.ProviderAvailableFor(ctx) {
 		return nil, fmt.Errorf("ai provider unavailable")
 	}
 	raw, err := s.aiService.CompleteJSON(ctx, prompt)

@@ -31,6 +31,12 @@ func (r *DictionaryRepository) EnsureExampleTable(ctx context.Context) error {
 			ai_model TEXT,
 			prompt_version TEXT,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		);
+		CREATE TABLE IF NOT EXISTS dictionary_forms (
+			id BIGSERIAL PRIMARY KEY,
+			dictionary_entry_id BIGINT NOT NULL REFERENCES dictionary_entries(id) ON DELETE CASCADE,
+			form TEXT NOT NULL UNIQUE,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		)
 	`)
 	if err != nil {
@@ -41,12 +47,13 @@ func (r *DictionaryRepository) EnsureExampleTable(ctx context.Context) error {
 
 func (r *DictionaryRepository) FindByText(ctx context.Context, text string) (*model.DictionaryEntry, error) {
 	row := r.db.QueryRowContext(ctx, `
-		SELECT id, surface, lemma, reading, romaji, part_of_speech, meaning_zh, meaning_ja, meaning_en,
-		       primary_meaning_zh, jlpt_level, example_sentence, example_translation_zh, conjugation_type,
-		       is_common, source, verified, confidence_score::text, ai_model, prompt_version, created_at, updated_at
-		FROM dictionary_entries
-		WHERE surface = $1 OR lemma = $1
-		ORDER BY verified DESC, source = 'builtin' DESC, id ASC
+		SELECT de.id, de.surface, de.lemma, de.reading, de.romaji, de.part_of_speech, de.meaning_zh, de.meaning_ja, de.meaning_en,
+		       de.primary_meaning_zh, de.jlpt_level, de.example_sentence, de.example_translation_zh, de.conjugation_type,
+		       de.is_common, de.source, de.verified, de.confidence_score::text, de.ai_model, de.prompt_version, de.created_at, de.updated_at
+		FROM dictionary_entries de
+		LEFT JOIN dictionary_forms df ON df.dictionary_entry_id = de.id
+		WHERE de.surface = $1 OR de.lemma = $1 OR df.form = $1
+		ORDER BY de.verified DESC, de.source = 'builtin' DESC, de.id ASC
 		LIMIT 1
 	`, text)
 
@@ -58,6 +65,22 @@ func (r *DictionaryRepository) FindByText(ctx context.Context, text string) (*mo
 		return nil, fmt.Errorf("find dictionary entry by text: %w", err)
 	}
 	return entry, nil
+}
+
+func (r *DictionaryRepository) CreateForm(ctx context.Context, entryID int64, form string) error {
+	form = strings.TrimSpace(form)
+	if form == "" {
+		return nil
+	}
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO dictionary_forms (dictionary_entry_id, form)
+		VALUES ($1, $2)
+		ON CONFLICT (form) DO UPDATE SET dictionary_entry_id = EXCLUDED.dictionary_entry_id
+	`, entryID, form)
+	if err != nil {
+		return fmt.Errorf("create dictionary form: %w", err)
+	}
+	return nil
 }
 
 func (r *DictionaryRepository) GetByID(ctx context.Context, entryID int64) (*model.DictionaryEntry, error) {

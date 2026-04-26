@@ -37,7 +37,7 @@ func (s *TranslationService) TranslateToJapanese(ctx context.Context, language, 
 	)
 	modelName := fallbackModel
 	if s.aiService != nil {
-		modelName = s.aiService.ModelName(fallbackModel)
+		modelName = s.aiService.ModelNameFor(ctx, fallbackModel)
 	}
 	prompt := promptArticleTranslation(language, cleaned, level)
 	request := map[string]any{
@@ -72,7 +72,7 @@ func (s *TranslationService) TranslateToJapanese(ctx context.Context, language, 
 }
 
 func (s *TranslationService) translateWithAI(ctx context.Context, prompt AIPrompt) (translationResult, error) {
-	if !s.aiService.ProviderAvailable() {
+	if !s.aiService.ProviderAvailableFor(ctx) {
 		return translationResult{}, fmt.Errorf("ai provider unavailable")
 	}
 	raw, err := s.aiService.CompleteJSON(ctx, prompt)

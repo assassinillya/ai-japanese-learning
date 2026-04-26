@@ -11,7 +11,7 @@ const aiPromptVersionV12 = "v1.2"
 
 func promptDictionaryEntry(text string) AIPrompt {
 	return AIPrompt{
-		System: "你是日语词典生成器。只返回合法 JSON，不要 Markdown，不要额外解释。字段必须完整；不确定 JLPT 时返回 unknown；source 必须为 ai；verified 必须为 false；confidence_score 用字符串小数。",
+		System: "你是日语词典生成器。只返回合法 JSON，不要 Markdown，不要额外解释。字段必须完整；如果查询文本是动词、形容词或助动词的变形，lemma 必须返回词典形/原型；surface 也优先返回原型；不确定 JLPT 时返回 unknown；source 必须为 ai；verified 必须为 false；confidence_score 用字符串小数。",
 		User: fmt.Sprintf(`为查询文本生成日语学习词典词条。
 
 查询文本：%s

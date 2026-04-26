@@ -78,10 +78,10 @@ func (s *ChallengeService) Generate(ctx context.Context, userID, articleID int64
 	aiModel := "placeholder-challenge-generator"
 	promptVersion := "v0.8-review"
 	request := challengeCacheRequest(article, sentences, QuestionTypeChallengeReading)
-	if s.aiService == nil || !s.aiService.ProviderAvailable() {
+	if s.aiService == nil || !s.aiService.ProviderAvailableFor(ctx) {
 		return nil, fmt.Errorf("挑战阅读题需要先配置可用 AI Provider，请在个人中心查看 AI 接入说明")
 	}
-	aiModel = s.aiService.ModelName("ai-challenge-generator")
+	aiModel = s.aiService.ModelNameFor(ctx, "ai-challenge-generator")
 	promptVersion = aiPromptVersionV12
 	cacheKey, inputHash := s.challengeCacheKey(request, aiModel, promptVersion)
 	if cached, ok := s.getCachedChallengeQuestions(ctx, cacheKey); ok {
@@ -137,10 +137,10 @@ func (s *ChallengeService) GeneratePostQuiz(ctx context.Context, userID, article
 	aiModel := "placeholder-post-quiz-generator"
 	promptVersion := "v0.8-review"
 	request := challengeCacheRequest(article, sentences, QuestionTypePostReadingQuiz)
-	if s.aiService == nil || !s.aiService.ProviderAvailable() {
+	if s.aiService == nil || !s.aiService.ProviderAvailableFor(ctx) {
 		return nil, fmt.Errorf("阅读后测验需要先配置可用 AI Provider，请在个人中心查看 AI 接入说明")
 	}
-	aiModel = s.aiService.ModelName("ai-post-quiz-generator")
+	aiModel = s.aiService.ModelNameFor(ctx, "ai-post-quiz-generator")
 	promptVersion = aiPromptVersionV12
 	cacheKey, inputHash := s.challengeCacheKey(request, aiModel, promptVersion)
 	if cached, ok := s.getCachedChallengeQuestions(ctx, cacheKey); ok {

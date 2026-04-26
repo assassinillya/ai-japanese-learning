@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"ai-japanese-learning/internal/model"
+	"ai-japanese-learning/internal/repository"
 	"ai-japanese-learning/internal/service"
 )
 
@@ -26,6 +27,7 @@ type Router struct {
 	reviewService     *service.ReviewService
 	statsService      *service.StatsService
 	aiService         *service.AIService
+	userAIConfigRepo  *repository.UserAIConfigRepository
 }
 
 type staticServer interface {
@@ -42,6 +44,7 @@ func NewRouter(
 	reviewService *service.ReviewService,
 	statsService *service.StatsService,
 	aiService *service.AIService,
+	userAIConfigRepo *repository.UserAIConfigRepository,
 	static staticServer,
 ) *Router {
 	r := &Router{
@@ -55,6 +58,7 @@ func NewRouter(
 		reviewService:     reviewService,
 		statsService:      statsService,
 		aiService:         aiService,
+		userAIConfigRepo:  userAIConfigRepo,
 	}
 
 	r.mux.Handle("/assets/", http.StripPrefix("/assets/", static.Handler()))
@@ -116,7 +120,7 @@ func NewRouter(
 func (r *Router) handleHealth(w http.ResponseWriter, req *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{
 		"status":  "ok",
-		"version": "v1.2",
+		"version": "v1.3",
 	})
 }
 
@@ -140,6 +144,12 @@ func (r *Router) withAuth(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		ctx := context.WithValue(req.Context(), userContextKey, user)
+		if r.userAIConfigRepo != nil {
+			cfg, err := r.userAIConfigRepo.Get(ctx, user.ID)
+			if err == nil {
+				ctx = service.ContextWithAIProviderConfig(ctx, aiConfigFromRepository(cfg))
+			}
+		}
 		next(w, req.WithContext(ctx))
 	}
 }

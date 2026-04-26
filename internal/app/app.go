@@ -34,6 +34,11 @@ func New(cfg *config.Config) (*App, error) {
 	challengeRepo := repository.NewChallengeRepository(postgres)
 	reviewRepo := repository.NewReviewRepository(postgres)
 	aiRepo := repository.NewAIRepository(postgres)
+	userAIConfigRepo := repository.NewUserAIConfigRepository(postgres)
+	if err := userAIConfigRepo.EnsureTable(context.Background()); err != nil {
+		_ = postgres.Close()
+		return nil, err
+	}
 	statsRepo := repository.NewStatsRepository(postgres)
 	authService := service.NewAuthService(userRepo, cfg.TokenSecret)
 	profileService := service.NewProfileService(userRepo)
@@ -64,6 +69,7 @@ func New(cfg *config.Config) (*App, error) {
 		reviewService,
 		statsService,
 		aiService,
+		userAIConfigRepo,
 		web.NewStaticServer(),
 	)
 

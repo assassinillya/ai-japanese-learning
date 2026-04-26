@@ -83,6 +83,7 @@
 - 生词本列表。
 - 生词详情。
 - AI 例句管理：每次生成 1 句，最多 3 句，可删除后继续生成。
+- 变形词会通过隐藏索引映射到原型词条，生词本中以原型词条复用。
 - 生词状态筛选。
 - 修改生词状态。
 - 删除生词。
@@ -177,6 +178,7 @@ GET /api/stats/learning
 - 可配置 AI provider 接口。
 - 支持 OpenAI、OpenAI Responses、Gemini、Anthropic、Azure OpenAI 和 New API。
 - 个人中心可填写供应商名称、API 地址、API Key、API Version，并获取模型列表、选择模型、检测连接、保存启用。
+- AI 配置保存到用户账号，登录后的 AI 调用默认使用当前用户自己的配置。
 - 后端会按供应商类型自动补齐调用 endpoint 和模型列表 endpoint，输入 `/v1` 或完整 endpoint 时不会重复追加后缀。
 - 未配置 `AI_API_KEY` 时，继续使用本地占位生成器。
 - 已提供 Prompt 模板：

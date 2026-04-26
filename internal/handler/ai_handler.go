@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"ai-japanese-learning/internal/repository"
 	"ai-japanese-learning/internal/service"
 )
 
@@ -23,6 +24,22 @@ func (r *Router) handleAIProviders(w http.ResponseWriter, req *http.Request) {
 }
 
 func (r *Router) handleAIConfig(w http.ResponseWriter, req *http.Request) {
+	user, err := currentUser(req.Context())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	if r.userAIConfigRepo != nil {
+		cfg, err := r.userAIConfigRepo.Get(req.Context(), user.ID)
+		if err == nil {
+			writeJSON(w, http.StatusOK, r.aiService.StatusForConfig(aiConfigFromRepository(cfg)))
+			return
+		}
+		if err != repository.ErrUserAIConfigNotFound {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+	}
 	writeJSON(w, http.StatusOK, r.aiService.CurrentStatus())
 }
 
@@ -31,15 +48,45 @@ func (r *Router) handleAIConfigUpdate(w http.ResponseWriter, req *http.Request) 
 	if !ok {
 		return
 	}
-	status, err := r.aiService.ConfigureProvider(cfg)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-		return
+	status := r.aiService.StatusForConfig(cfg)
+	if r.userAIConfigRepo != nil {
+		user, err := currentUser(req.Context())
+		if err != nil {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+			return
+		}
+		if err := r.userAIConfigRepo.Upsert(req.Context(), user.ID, aiConfigToRepository(cfg)); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":  status,
-		"message": "AI provider configured for current server process",
+		"message": "AI provider saved for current user",
 	})
+}
+
+func aiConfigFromRepository(cfg repository.UserAIConfig) service.AIProviderConfig {
+	return service.AIProviderConfig{
+		Provider:     cfg.Provider,
+		ProviderName: cfg.ProviderName,
+		BaseURL:      cfg.BaseURL,
+		APIKey:       cfg.APIKey,
+		Model:        cfg.Model,
+		APIVersion:   cfg.APIVersion,
+	}
+}
+
+func aiConfigToRepository(cfg service.AIProviderConfig) repository.UserAIConfig {
+	cfg = service.NormalizeAIProviderConfig(cfg)
+	return repository.UserAIConfig{
+		Provider:     cfg.Provider,
+		ProviderName: cfg.ProviderName,
+		BaseURL:      cfg.BaseURL,
+		APIKey:       cfg.APIKey,
+		Model:        cfg.Model,
+		APIVersion:   cfg.APIVersion,
+	}
 }
 
 func (r *Router) handleAIModels(w http.ResponseWriter, req *http.Request) {

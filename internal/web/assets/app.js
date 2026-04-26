@@ -37,6 +37,7 @@ const state = {
     drag: null,
   },
   pendingRequests: 0,
+  historyReady: false,
 };
 
 const views = document.querySelectorAll(".view");
@@ -127,6 +128,9 @@ document.querySelectorAll("[data-view]").forEach((button) => {
     }
     if (view === "vocabulary" && state.user) {
       await loadVocabularyList();
+    }
+    if (view === "articles" && state.user) {
+      await Promise.all([loadArticles(), loadPublicArticles()]);
     }
     if (view === "review" && state.user) {
       await loadReviewDue();
@@ -813,6 +817,11 @@ document.addEventListener("selectionchange", () => {
   }
 });
 
+window.addEventListener("popstate", (event) => {
+  const view = event.state?.view || "home";
+  showView(view, { push: false });
+});
+
 async function bootstrap() {
   if (state.token) {
     const me = await request("/api/auth/me");
@@ -832,6 +841,17 @@ function showView(name) {
   document.querySelectorAll("[data-view]").forEach((button) => {
     button.classList.toggle("active", button.dataset.view === name && button.classList.contains("nav-item"));
   });
+  if (!state.historyReady) {
+    window.history.replaceState({ view: name }, "", window.location.href);
+    state.historyReady = true;
+    return;
+  }
+  if (arguments[1]?.push === false) {
+    return;
+  }
+  if (window.history.state?.view !== name) {
+    window.history.pushState({ view: name }, "", window.location.href);
+  }
 }
 
 function renderUser() {

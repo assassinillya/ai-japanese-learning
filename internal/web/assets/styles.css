@@ -737,20 +737,33 @@ label {
 
 .vocabulary-row {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
+  grid-template-columns: 22px minmax(0, 1fr);
   align-items: start;
-  gap: 10px;
+  gap: 4px;
 }
 
 .vocabulary-check {
-  padding-top: 18px;
+  padding-top: 12px;
+}
+
+.vocabulary-item {
+  gap: 5px;
+  padding: 10px 12px;
 }
 
 .vocabulary-item > span:first-child {
   display: grid;
   grid-template-columns: minmax(120px, 1fr) auto;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+}
+
+.vocabulary-item .meta {
+  margin: 0;
+}
+
+.vocabulary-item span {
+  line-height: 1.45;
 }
 
 .dictionary-examples-panel {
