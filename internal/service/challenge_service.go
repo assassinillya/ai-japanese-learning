@@ -76,6 +76,14 @@ func (s *ChallengeService) ListExisting(ctx context.Context, userID, articleID i
 }
 
 func (s *ChallengeService) Generate(ctx context.Context, userID, articleID int64) ([]model.ChallengeQuestion, error) {
+	return s.generate(ctx, userID, articleID, false)
+}
+
+func (s *ChallengeService) Regenerate(ctx context.Context, userID, articleID int64) ([]model.ChallengeQuestion, error) {
+	return s.generate(ctx, userID, articleID, true)
+}
+
+func (s *ChallengeService) generate(ctx context.Context, userID, articleID int64, force bool) ([]model.ChallengeQuestion, error) {
 	article, err := s.articleRepo.GetAccessible(ctx, userID, articleID)
 	if err != nil {
 		return nil, err
@@ -98,11 +106,13 @@ func (s *ChallengeService) Generate(ctx context.Context, userID, articleID int64
 	aiModel = s.aiService.ModelNameFor(ctx, "ai-challenge-generator")
 	promptVersion = aiPromptVersionV12
 	cacheKey, inputHash := s.challengeCacheKey(request, aiModel, promptVersion)
-	if cached, ok := s.getCachedChallengeQuestions(ctx, cacheKey); ok {
-		if err := s.challengeRepo.ReplaceByArticleAndType(ctx, articleID, QuestionTypeChallengeReading, cached); err != nil {
-			return nil, err
+	if !force {
+		if cached, ok := s.getCachedChallengeQuestions(ctx, cacheKey); ok {
+			if err := s.challengeRepo.ReplaceByArticleAndType(ctx, articleID, QuestionTypeChallengeReading, cached); err != nil {
+				return nil, err
+			}
+			return s.challengeRepo.ListByArticleAndType(ctx, articleID, QuestionTypeChallengeReading)
 		}
-		return s.challengeRepo.ListByArticleAndType(ctx, articleID, QuestionTypeChallengeReading)
 	}
 	questions, err := s.generateQuestionsWithAI(ctx, articleID, request, QuestionTypeChallengeReading, aiModel, promptVersion)
 	if err != nil {
@@ -114,6 +124,77 @@ func (s *ChallengeService) Generate(ctx context.Context, userID, articleID int64
 		return nil, err
 	}
 	return s.challengeRepo.ListByArticleAndType(ctx, articleID, QuestionTypeChallengeReading)
+}
+
+func (s *ChallengeService) GeneratePostQuiz(ctx context.Context, userID, articleID int64) ([]model.ChallengeQuestion, error) {
+	return s.generatePostQuiz(ctx, userID, articleID, false, false)
+}
+
+func (s *ChallengeService) AppendPostQuiz(ctx context.Context, userID, articleID int64) ([]model.ChallengeQuestion, error) {
+	return s.generatePostQuiz(ctx, userID, articleID, true, true)
+}
+
+func (s *ChallengeService) generatePostQuiz(ctx context.Context, userID, articleID int64, force bool, appendMode bool) ([]model.ChallengeQuestion, error) {
+	article, err := s.articleRepo.GetAccessible(ctx, userID, articleID)
+	if err != nil {
+		return nil, err
+	}
+
+	sentences, err := s.articleRepo.ListSentences(ctx, articleID)
+	if err != nil {
+		return nil, err
+	}
+	if len(sentences) == 0 {
+		return nil, fmt.Errorf("article has no sentences")
+	}
+
+	existing := []model.ChallengeQuestion{}
+	if appendMode {
+		existing, err = s.challengeRepo.ListByArticleAndType(ctx, articleID, QuestionTypePostReadingQuiz)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	aiModel := "placeholder-post-quiz-generator"
+	promptVersion := "v0.8-review"
+	request := challengeCacheRequest(article, sentences, QuestionTypePostReadingQuiz)
+	for _, question := range existing {
+		request.ExistingQuestions = append(request.ExistingQuestions, question.MaskedSentence)
+	}
+	if s.aiService == nil || !s.aiService.ProviderAvailableFor(ctx) {
+		return nil, fmt.Errorf("阅读理解题需要先配置可用 AI Provider，请在个人中心查看 AI 接入说明")
+	}
+	aiModel = s.aiService.ModelNameFor(ctx, "ai-post-quiz-generator")
+	promptVersion = aiPromptVersionV12
+	cacheKey, inputHash := s.challengeCacheKey(request, aiModel, promptVersion)
+	if !force {
+		if cached, ok := s.getCachedChallengeQuestions(ctx, cacheKey); ok {
+			if err := s.challengeRepo.ReplaceByArticleAndType(ctx, articleID, QuestionTypePostReadingQuiz, cached); err != nil {
+				return nil, err
+			}
+			return s.challengeRepo.ListByArticleAndType(ctx, articleID, QuestionTypePostReadingQuiz)
+		}
+	}
+	questions, err := s.generateQuestionsWithAI(ctx, articleID, request, QuestionTypePostReadingQuiz, aiModel, promptVersion)
+	if err != nil {
+		s.aiService.LogFailure(ctx, QuestionTypePostReadingQuiz, request, err, aiModel, promptVersion)
+		return nil, err
+	}
+	s.storeCachedChallengeQuestions(ctx, QuestionTypePostReadingQuiz, inputHash, cacheKey, request, questions, aiModel, promptVersion)
+	if appendMode {
+		for idx := range questions {
+			questions[idx].QuestionOrder = len(existing) + idx + 1
+		}
+		if err := s.challengeRepo.AppendByArticleAndType(ctx, articleID, QuestionTypePostReadingQuiz, questions); err != nil {
+			return nil, err
+		}
+		return s.challengeRepo.ListByArticleAndType(ctx, articleID, QuestionTypePostReadingQuiz)
+	}
+	if err := s.challengeRepo.ReplaceByArticleAndType(ctx, articleID, QuestionTypePostReadingQuiz, questions); err != nil {
+		return nil, err
+	}
+	return s.challengeRepo.ListByArticleAndType(ctx, articleID, QuestionTypePostReadingQuiz)
 }
 
 func (s *ChallengeService) GetOrGeneratePostQuiz(ctx context.Context, userID, articleID int64) ([]model.ChallengeQuestion, error) {
@@ -146,47 +227,6 @@ func (s *ChallengeService) ListExistingPostQuiz(ctx context.Context, userID, art
 		return []model.ChallengeQuestion{}, nil
 	}
 	return existing, nil
-}
-
-func (s *ChallengeService) GeneratePostQuiz(ctx context.Context, userID, articleID int64) ([]model.ChallengeQuestion, error) {
-	article, err := s.articleRepo.GetAccessible(ctx, userID, articleID)
-	if err != nil {
-		return nil, err
-	}
-
-	sentences, err := s.articleRepo.ListSentences(ctx, articleID)
-	if err != nil {
-		return nil, err
-	}
-	if len(sentences) == 0 {
-		return nil, fmt.Errorf("article has no sentences")
-	}
-
-	aiModel := "placeholder-post-quiz-generator"
-	promptVersion := "v0.8-review"
-	request := challengeCacheRequest(article, sentences, QuestionTypePostReadingQuiz)
-	if s.aiService == nil || !s.aiService.ProviderAvailableFor(ctx) {
-		return nil, fmt.Errorf("阅读理解题需要先配置可用 AI Provider，请在个人中心查看 AI 接入说明")
-	}
-	aiModel = s.aiService.ModelNameFor(ctx, "ai-post-quiz-generator")
-	promptVersion = aiPromptVersionV12
-	cacheKey, inputHash := s.challengeCacheKey(request, aiModel, promptVersion)
-	if cached, ok := s.getCachedChallengeQuestions(ctx, cacheKey); ok {
-		if err := s.challengeRepo.ReplaceByArticleAndType(ctx, articleID, QuestionTypePostReadingQuiz, cached); err != nil {
-			return nil, err
-		}
-		return s.challengeRepo.ListByArticleAndType(ctx, articleID, QuestionTypePostReadingQuiz)
-	}
-	questions, err := s.generateQuestionsWithAI(ctx, articleID, request, QuestionTypePostReadingQuiz, aiModel, promptVersion)
-	if err != nil {
-		s.aiService.LogFailure(ctx, QuestionTypePostReadingQuiz, request, err, aiModel, promptVersion)
-		return nil, err
-	}
-	s.storeCachedChallengeQuestions(ctx, QuestionTypePostReadingQuiz, inputHash, cacheKey, request, questions, aiModel, promptVersion)
-	if err := s.challengeRepo.ReplaceByArticleAndType(ctx, articleID, QuestionTypePostReadingQuiz, questions); err != nil {
-		return nil, err
-	}
-	return s.challengeRepo.ListByArticleAndType(ctx, articleID, QuestionTypePostReadingQuiz)
 }
 
 func (s *ChallengeService) ListPostQuizResults(ctx context.Context, userID, articleID int64) ([]model.ReadingAnswerDetail, error) {
@@ -463,10 +503,13 @@ func (s *ChallengeService) buildMeaningOptions(ctx context.Context, correct *mod
 }
 
 type challengeQuestionCacheRequest struct {
-	ArticleID    int64                    `json:"article_id"`
-	JLPTLevel    model.JLPTLevel          `json:"jlpt_level"`
-	QuestionType string                   `json:"question_type"`
-	Sentences    []challengeCacheSentence `json:"sentences"`
+	ArticleID         int64                    `json:"article_id"`
+	Title             string                   `json:"title"`
+	JLPTLevel         model.JLPTLevel          `json:"jlpt_level"`
+	QuestionType      string                   `json:"question_type"`
+	FullText          string                   `json:"full_text"`
+	Sentences         []challengeCacheSentence `json:"sentences"`
+	ExistingQuestions []string                 `json:"existing_questions,omitempty"`
 }
 
 type challengeCacheSentence struct {
@@ -478,9 +521,14 @@ type challengeCacheSentence struct {
 func challengeCacheRequest(article *model.Article, sentences []model.ArticleSentence, questionType string) challengeQuestionCacheRequest {
 	request := challengeQuestionCacheRequest{
 		ArticleID:    article.ID,
+		Title:        article.Title,
 		JLPTLevel:    article.JLPTLevel,
 		QuestionType: questionType,
+		FullText:     strings.TrimSpace(article.JapaneseContent),
 		Sentences:    make([]challengeCacheSentence, 0, len(sentences)),
+	}
+	if request.FullText == "" && article.OriginalContent != nil {
+		request.FullText = strings.TrimSpace(*article.OriginalContent)
 	}
 	for _, sentence := range sentences {
 		request.Sentences = append(request.Sentences, challengeCacheSentence{

@@ -55,11 +55,11 @@ func (s *VocabularyService) Check(ctx context.Context, userID, dictionaryEntryID
 	return nil, false, err
 }
 
-func (s *VocabularyService) List(ctx context.Context, userID int64, status string) ([]model.VocabularyDetail, error) {
+func (s *VocabularyService) List(ctx context.Context, userID int64, status string, search string) ([]model.VocabularyDetail, error) {
 	if status != "" && !isValidVocabularyStatus(model.VocabularyStatus(status)) {
 		return nil, fmt.Errorf("invalid vocabulary status")
 	}
-	return s.vocabularyRepo.ListByUser(ctx, userID, status)
+	return s.vocabularyRepo.ListByUser(ctx, userID, status, search)
 }
 
 func (s *VocabularyService) GetDetail(ctx context.Context, userID, vocabularyID int64) (*model.VocabularyDetail, error) {

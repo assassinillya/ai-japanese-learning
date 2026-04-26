@@ -83,18 +83,40 @@ func promptArticleTranslation(language, content string, level model.JLPTLevel) A
 返回 JSON 格式：
 {
   "japanese_content": "日语文章，按自然句子组织",
+  "chinese_summary": "用简体中文一句话概括文章内容，30到80字",
   "source_type": "ai_translated",
   "is_ai_generated": true,
-  "note": "简短处理说明"
+  "note": "用简体中文简短说明本次处理"
 }`, level, language, content),
+	}
+}
+
+func promptArticleSummaryZH(title, content string) AIPrompt {
+	return AIPrompt{
+		System: "你是日语学习文章简介生成器。只返回合法 JSON，不要 Markdown。简介面向中文用户，必须简短、自然、说明文章大概内容。",
+		User: fmt.Sprintf(`请为下面文章生成简体中文简介。
+
+标题：%s
+文章：
+%s
+
+返回 JSON 格式：
+{
+  "chinese_summary": "30到80字，概括文章讲了什么，不要出现 ja.20、文件名、处理流水号等技术信息"
+}`, title, content),
 	}
 }
 
 func promptChallengeQuestions(request challengeQuestionCacheRequest) AIPrompt {
 	raw, _ := json.Marshal(request)
 	return AIPrompt{
-		System: "你是 JLPT 日语阅读词汇和语法分析器。只返回合法 JSON，不要 Markdown。你不出题，只根据文章推荐重点词汇和重点语法。",
-		User: fmt.Sprintf(`请从文章中选出 3 到 5 个最值得学习的重点词汇或短语，并选出 3 到 5 个最值得学习的重点语法或固定用法。两类都要按 JLPT 考点重要度从高到低排序。不要选择过于简单或无学习价值的片段。
+		System: "你是 JLPT 日语阅读考点分析器。只返回合法 JSON，不要 Markdown。你不出题，只根据文章推荐最可能作为 JLPT 考点的重点词汇、固定用法和语法。",
+		User: fmt.Sprintf(`请以 JLPT 考点分析的方式，从文章中选出 3 到 5 个最值得学习、最可能在 JLPT 阅读或词汇语法题中考到的重点词汇或短语，并选出 3 到 5 个最可能考试的重点语法、句型或固定用法。两类都要按“JLPT 考点重要度”从高到低排序。
+
+选择规则：
+- 优先选择 JLPT 高频词、常见考点词、易混词、固定搭配、接续表达、句型和文法。
+- 不要选择过于简单、只在本文偶然出现、没有考试价值的片段。
+- explanation 必须说明它为什么是 JLPT 考点，以及在本文中的意思或用法。
 
 输入 JSON：
 %s
@@ -109,10 +131,10 @@ func promptChallengeQuestions(request challengeQuestionCacheRequest) AIPrompt {
       "correct_answer_text": "推荐词汇的词典形或标准表达",
       "option_a": "JLPT 等级，例如 N3",
       "option_b": "文章内出现频次，例如 1",
-      "option_c": "考点重要度：高/中/低",
+      "option_c": "JLPT 考点重要度：高/中/低",
       "option_d": "类型：vocabulary 或 grammar",
       "correct_option": "A",
-      "explanation": "中文释义、考点说明或推荐理由"
+      "explanation": "中文释义、用法说明和 JLPT 考点理由"
     }
   ]
 }`, string(raw)),
@@ -122,8 +144,19 @@ func promptChallengeQuestions(request challengeQuestionCacheRequest) AIPrompt {
 func promptPostQuizQuestions(request challengeQuestionCacheRequest) AIPrompt {
 	raw, _ := json.Marshal(request)
 	return AIPrompt{
-		System: "你是 JLPT 日语阅读理解题生成器。只返回合法 JSON，不要 Markdown。题目必须考查文章主旨、细节、指代、原因、作者意图或句间关系，不要做单词释义题。",
-		User: fmt.Sprintf(`请基于文章生成 3 到 5 道 JLPT 阅读理解四选一题，难度匹配 JLPT %s。题干和选项用中文，必要时可引用日语短句。
+		System: "你是 JLPT 日语阅读理解题命题老师。只返回合法 JSON，不要 Markdown。必须基于整篇文章命题，题型遵循 JLPT 阅读理解，不要出填空题、挖空题、单词释义题或语法选择题。题干、选项和正确答案必须使用自然日语；解析必须使用简体中文，方便中文用户复盘。",
+		User: fmt.Sprintf(`请基于整篇文章生成 3 到 5 道 JLPT 阅读理解四选一题，难度匹配 JLPT %s。
+
+命题规则：
+- 题目必须像 JLPT 阅读理解题，围绕文章内容提问，例如「ラジャさんは先週何をしましたか。」。
+- 可以出主旨题、细节题、原因题、指代题、作者意图题、态度/立意题、段落关系题、推论题。
+- 禁止把原句挖空，禁止要求选择一个词填入空格，禁止单纯考单词中文意思。
+- 必须阅读 full_text 整篇文章后出题，不要只根据单句局部出题。
+- sentence_text 填写支持答案的关键句、段落或证据；explanation 用简体中文说明依据。
+- 如果 existing_questions 里已有题干，追加题目时不要重复相同考点或相同题干。
+- masked_sentence、correct_answer_text、option_a、option_b、option_c、option_d 全部必须是日语。
+- explanation 必须是简体中文解析，说明正确答案对应的原文依据和干扰项问题。
+- 选项必须是内容理解答案，不要只给单词或短语。
 
 输入 JSON：
 %s
@@ -133,13 +166,13 @@ func promptPostQuizQuestions(request challengeQuestionCacheRequest) AIPrompt {
   "items": [
     {
       "sentence_id": 1,
-      "sentence_text": "题目依据的原文句子或段落",
-      "masked_sentence": "阅读理解题干",
+      "sentence_text": "支持答案的原文关键句或段落",
+      "masked_sentence": "阅读理解题干，不要挖空",
       "correct_answer_text": "正确选项文本",
-      "option_a": "选项A",
-      "option_b": "选项B",
-      "option_c": "选项C",
-      "option_d": "选项D",
+      "option_a": "日本語の選択肢A",
+      "option_b": "日本語の選択肢B",
+      "option_c": "日本語の選択肢C",
+      "option_d": "日本語の選択肢D",
       "correct_option": "A",
       "explanation": "中文解析"
     }

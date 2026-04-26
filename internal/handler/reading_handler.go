@@ -50,9 +50,15 @@ func (r *Router) handleGenerateChallengeQuestions(w http.ResponseWriter, req *ht
 		return
 	}
 
-	questions, err := r.challengeService.Generate(req.Context(), user.ID, articleID)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	var questions any
+	var genErr error
+	if req.URL.Query().Get("refresh") == "1" {
+		questions, genErr = r.challengeService.Regenerate(req.Context(), user.ID, articleID)
+	} else {
+		questions, genErr = r.challengeService.Generate(req.Context(), user.ID, articleID)
+	}
+	if genErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": genErr.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": questions})
@@ -92,9 +98,15 @@ func (r *Router) handleGeneratePostQuiz(w http.ResponseWriter, req *http.Request
 		return
 	}
 
-	questions, err := r.challengeService.GeneratePostQuiz(req.Context(), user.ID, articleID)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	var questions any
+	var genErr error
+	if req.URL.Query().Get("append") == "1" {
+		questions, genErr = r.challengeService.AppendPostQuiz(req.Context(), user.ID, articleID)
+	} else {
+		questions, genErr = r.challengeService.GeneratePostQuiz(req.Context(), user.ID, articleID)
+	}
+	if genErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": genErr.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": questions})

@@ -16,6 +16,7 @@
   --radius-lg: 24px;
   --shadow-card: 0 20px 45px rgba(99, 102, 241, 0.12);
   --shadow-soft: 0 12px 30px rgba(31, 41, 55, 0.08);
+  --reading-shell-width: 1128px;
 }
 
 * { box-sizing: border-box; }
@@ -500,11 +501,7 @@ label {
   color: var(--color-primary);
 }
 
-.reading-page {
-  --reading-shell-width: 1128px;
-  max-width: 1220px;
-  margin: 0 auto;
-}
+.reading-page { margin: 0 auto; }
 
 .reading-toolbar {
   position: sticky;
@@ -544,12 +541,33 @@ label {
   margin-right: auto;
 }
 
+.reading-main {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
 .reading-container, .reading-content {
   padding: 34px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: rgba(255, 255, 255, 0.9);
   box-shadow: var(--shadow-card);
+}
+
+.reading-recommendations {
+  display: grid;
+  gap: 12px;
+  padding: 22px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: var(--shadow-soft);
+}
+
+.section-heading {
+  display: grid;
+  gap: 4px;
 }
 
 .reading-sentence {
@@ -677,7 +695,7 @@ label {
 }
 
 .generation-panel {
-  max-width: 1180px;
+  width: min(100%, var(--reading-shell-width));
   margin: 0 auto 18px;
   display: grid;
   gap: 10px;
@@ -855,6 +873,34 @@ label {
   flex-wrap: wrap;
 }
 
+.segmented-control,
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 14px;
+}
+
+.segmented-control button {
+  min-height: 34px;
+  padding: 7px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  color: var(--color-muted);
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.segmented-control button.active {
+  color: white;
+  border-color: transparent;
+  background: var(--color-primary);
+}
+
+.pagination-bar {
+  justify-content: flex-end;
+}
+
 .vocabulary-list {
   display: grid;
   gap: 12px;
@@ -931,6 +977,11 @@ label {
 }
 
 .vocabulary-detail-card {
+  position: sticky;
+  top: 24px;
+  align-self: start;
+  max-height: calc(100vh - 48px);
+  overflow: auto;
   padding: 14px 16px;
 }
 
@@ -962,23 +1013,31 @@ label {
 }
 
 .dictionary-examples-panel {
-  margin-top: 18px;
-  padding-top: 14px;
+  margin-top: 8px;
+  padding-top: 8px;
   border-top: 1px solid var(--color-border);
+}
+
+.dictionary-examples-panel .detail-actions {
+  margin: 4px 0 8px;
 }
 
 .dictionary-example-list {
   display: grid;
-  gap: 10px;
+  gap: 6px;
 }
 
 .dictionary-example-item {
   display: grid;
-  gap: 6px;
-  padding: 12px;
+  gap: 4px;
+  padding: 8px 10px;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: rgba(248, 250, 252, 0.9);
+}
+
+.dictionary-example-item p {
+  margin: 0;
 }
 
 .article-section {

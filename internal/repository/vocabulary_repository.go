@@ -70,7 +70,7 @@ func (r *VocabularyRepository) Create(ctx context.Context, item *model.UserVocab
 	return item, nil
 }
 
-func (r *VocabularyRepository) ListByUser(ctx context.Context, userID int64, status string) ([]model.VocabularyDetail, error) {
+func (r *VocabularyRepository) ListByUser(ctx context.Context, userID int64, status string, search string) ([]model.VocabularyDetail, error) {
 	query := `
 		SELECT uv.id, uv.user_id, uv.dictionary_entry_id, uv.article_id, uv.source_sentence_id, uv.selected_text, uv.source_sentence_text,
 		       uv.status, uv.familiarity, uv.correct_count, uv.wrong_count, uv.consecutive_correct_count, uv.added_at,
@@ -85,11 +85,20 @@ func (r *VocabularyRepository) ListByUser(ctx context.Context, userID int64, sta
 		WHERE uv.user_id = $1
 	`
 	args := []any{userID}
+	nextArg := 2
 	if strings.TrimSpace(status) != "" {
-		query += ` AND uv.status = $2`
+		query += fmt.Sprintf(` AND uv.status = $%d`, nextArg)
 		args = append(args, status)
+		nextArg++
 	} else {
 		query += ` AND uv.status <> 'mastered'`
+	}
+	if strings.TrimSpace(search) != "" {
+		query += fmt.Sprintf(` AND (
+			de.surface ILIKE $%d OR de.lemma ILIKE $%d OR de.reading ILIKE $%d OR
+			de.meaning_zh ILIKE $%d OR uv.selected_text ILIKE $%d OR uv.source_sentence_text ILIKE $%d
+		)`, nextArg, nextArg, nextArg, nextArg, nextArg, nextArg)
+		args = append(args, "%"+strings.TrimSpace(search)+"%")
 	}
 	query += ` ORDER BY uv.added_at DESC`
 

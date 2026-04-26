@@ -155,6 +155,52 @@ func (r *ChallengeRepository) ReplaceByArticleAndType(ctx context.Context, artic
 	return nil
 }
 
+func (r *ChallengeRepository) AppendByArticleAndType(ctx context.Context, articleID int64, questionType string, questions []model.ChallengeQuestion) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin append challenge question tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	for idx := range questions {
+		q := &questions[idx]
+		if err := tx.QueryRowContext(ctx, `
+			INSERT INTO challenge_questions (
+				article_id, sentence_id, question_type, question_order, sentence_text, masked_sentence,
+				correct_entry_id, correct_answer_text, option_a, option_b, option_c, option_d,
+				correct_option, explanation, jlpt_level, ai_model, prompt_version
+			)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+			RETURNING id, created_at
+		`,
+			articleID,
+			q.SentenceID,
+			questionType,
+			q.QuestionOrder,
+			q.SentenceText,
+			q.MaskedSentence,
+			q.CorrectEntryID,
+			q.CorrectAnswerText,
+			q.OptionA,
+			q.OptionB,
+			q.OptionC,
+			q.OptionD,
+			q.CorrectOption,
+			q.Explanation,
+			q.JLPTLevel,
+			q.AIModel,
+			q.PromptVersion,
+		).Scan(&q.ID, &q.CreatedAt); err != nil {
+			return fmt.Errorf("append challenge question: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit append challenge question tx: %w", err)
+	}
+	return nil
+}
+
 func (r *ChallengeRepository) CreateAttempt(ctx context.Context, attempt *model.ChallengeQuestionAttempt) (*model.ChallengeQuestionAttempt, error) {
 	err := r.db.QueryRowContext(ctx, `
 		INSERT INTO challenge_question_attempts (question_id, user_id, selected_option, is_correct)

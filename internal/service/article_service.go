@@ -125,6 +125,11 @@ func (s *ArticleService) Process(ctx context.Context, userID, articleID int64) (
 		_ = s.articleRepo.UpdateProcessingState(ctx, article.ID, model.TranslationFailed, &failedNote)
 		return nil, fmt.Errorf("translated article content is empty")
 	}
+	chineseSummary := s.translationService.SummarizeChinese(ctx, article.Title, translated)
+	var chineseTranslation *string
+	if chineseSummary != "" {
+		chineseTranslation = &chineseSummary
+	}
 
 	rawSentences := splitSentences(translated)
 	sentences := make([]model.ArticleSentence, 0, len(rawSentences))
@@ -146,6 +151,7 @@ func (s *ArticleService) Process(ctx context.Context, userID, articleID int64) (
 		ctx,
 		article.ID,
 		translated,
+		chineseTranslation,
 		model.TranslationDone,
 		sourceType,
 		aiGenerated,

@@ -61,7 +61,7 @@ func (s *ReviewService) Due(ctx context.Context, userID int64, limit int) ([]mod
 }
 
 func (s *ReviewService) EnsureQuestionsForUser(ctx context.Context, userID int64) (int, error) {
-	details, err := s.vocabularyRepo.ListByUser(ctx, userID, "")
+	details, err := s.vocabularyRepo.ListByUser(ctx, userID, "", "")
 	if err != nil {
 		return 0, err
 	}

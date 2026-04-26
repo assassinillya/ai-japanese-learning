@@ -147,6 +147,7 @@ func (r *ArticleRepository) UpdateProcessedContent(
 	ctx context.Context,
 	articleID int64,
 	japaneseContent string,
+	chineseTranslation *string,
 	translationStatus model.TranslationStatus,
 	sourceType string,
 	isAIGenerated bool,
@@ -156,14 +157,15 @@ func (r *ArticleRepository) UpdateProcessedContent(
 	_, err := r.db.ExecContext(ctx, `
 		UPDATE articles
 		SET japanese_content = $2,
-		    translation_status = $3,
-		    source_type = $4,
-		    is_ai_generated = $5,
-		    processing_notes = $6,
-		    sentence_count = $7,
+		    chinese_translation = $3,
+		    translation_status = $4,
+		    source_type = $5,
+		    is_ai_generated = $6,
+		    processing_notes = $7,
+		    sentence_count = $8,
 		    updated_at = NOW()
 		WHERE id = $1
-	`, articleID, japaneseContent, translationStatus, sourceType, isAIGenerated, processingNotes, sentenceCount)
+	`, articleID, japaneseContent, chineseTranslation, translationStatus, sourceType, isAIGenerated, processingNotes, sentenceCount)
 	if err != nil {
 		return fmt.Errorf("update processed content: %w", err)
 	}

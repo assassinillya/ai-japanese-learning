@@ -39,7 +39,7 @@ func (r *Router) handleListVocabulary(w http.ResponseWriter, req *http.Request) 
 		return
 	}
 
-	items, err := r.vocabularyService.List(req.Context(), user.ID, req.URL.Query().Get("status"))
+	items, err := r.vocabularyService.List(req.Context(), user.ID, req.URL.Query().Get("status"), req.URL.Query().Get("q"))
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return

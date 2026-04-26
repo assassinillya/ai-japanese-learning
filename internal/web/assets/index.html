@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>日读 AI v1.5</title>
+    <title>日读 AI v1.6</title>
     <link rel="stylesheet" href="/assets/styles.css" />
   </head>
   <body>
@@ -13,7 +13,7 @@
           <div class="logo-mark">日</div>
           <div>
             <h1>日读 AI</h1>
-            <p>Nihongo Flow · v1.5</p>
+            <p>Nihongo Flow · v1.6</p>
           </div>
         </div>
         <nav class="sidebar-nav" aria-label="主导航">
@@ -45,6 +45,11 @@
           <div id="global-loading" class="loading-indicator hidden"><span class="loading-spinner"></span>处理中</div>
         </section>
         <section id="question-generation-panel" class="generation-panel hidden">
+          <div class="generation-row">
+            <span>文章初始化</span>
+            <div class="progress-bar compact-progress"><span id="article-init-generation-bar"></span></div>
+            <strong id="article-init-generation-status">等待处理</strong>
+          </div>
           <div class="generation-row">
             <span>重点词汇 / 语法</span>
             <div class="progress-bar compact-progress"><span id="challenge-generation-bar"></span></div>
@@ -171,11 +176,21 @@
           <section class="card article-section">
             <h3>我的文章</h3>
             <ul id="article-list" class="list article-grid"></ul>
+            <div class="pagination-bar" id="my-article-pagination"></div>
           </section>
           <section class="card article-section">
             <h3>公共文章</h3>
             <p class="muted">所有用户上传并处理完成的文章都会进入公共本地文章库，可直接学习。</p>
+            <div class="segmented-control" id="public-jlpt-filter">
+              <button class="active" type="button" data-public-jlpt="">全部</button>
+              <button type="button" data-public-jlpt="N1">N1</button>
+              <button type="button" data-public-jlpt="N2">N2</button>
+              <button type="button" data-public-jlpt="N3">N3</button>
+              <button type="button" data-public-jlpt="N4">N4</button>
+              <button type="button" data-public-jlpt="N5">N5</button>
+            </div>
             <ul id="public-article-list" class="list article-grid"></ul>
+            <div class="pagination-bar" id="public-article-pagination"></div>
           </section>
         </section>
 
@@ -221,19 +236,26 @@
             </div>
           </header>
           <div class="reading-layout">
-            <article id="reading-content" class="reading-container reading-content"></article>
+            <div class="reading-main">
+              <article id="reading-content" class="reading-container reading-content"></article>
+              <section id="article-recommendations" class="reading-recommendations">
+                <div class="section-heading">
+                  <strong>JLPT 考点重点</strong>
+                  <span class="meta">优先推荐考试中可能出现的词汇、固定用法和语法。</span>
+                </div>
+                <div id="key-vocabulary-list" class="side-study-list"><span class="meta">等待 AI 分析文章。</span></div>
+                <button id="regenerate-key-vocabulary-button" class="btn btn-secondary compact" type="button">重新生成重点</button>
+              </section>
+            </div>
             <aside class="study-panel">
               <strong>学习工具</strong>
               <span>框选日语词语查词</span>
               <span>加入生词本会保存上下文</span>
               <button class="btn btn-primary compact" data-view="review">去复习</button>
               <div class="side-study-section">
-                <strong>重点词汇 / 重点语法</strong>
-                <div id="key-vocabulary-list" class="side-study-list"><span class="meta">等待 AI 分析文章。</span></div>
-              </div>
-              <div class="side-study-section">
                 <strong>阅读理解</strong>
                 <div id="reading-comprehension-list" class="side-study-list"><span class="meta">等待 AI 生成题目。</span></div>
+                <button id="append-reading-quiz-button" class="btn btn-secondary compact" type="button">追加题目</button>
               </div>
             </aside>
           </div>
@@ -282,6 +304,10 @@
           <div class="vocabulary-layout">
             <div class="card">
               <form id="vocabulary-filter-form" class="inline-form">
+                <label>
+                  搜索
+                  <input class="input" name="q" type="search" placeholder="单词、读音、释义或例句" />
+                </label>
                 <label>
                   状态筛选
                   <select class="input" name="status">

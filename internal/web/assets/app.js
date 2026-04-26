@@ -6,6 +6,12 @@ const state = {
   selectedVocabularyIds: new Set(),
   readingArticle: null,
   vocabularyFilter: "",
+  vocabularySearch: "",
+  articles: [],
+  publicArticles: [],
+  articlePage: 1,
+  publicArticlePage: 1,
+  publicJLPTFilter: "",
   challenge: {
     questions: [],
     currentIndex: 0,
@@ -40,10 +46,13 @@ const state = {
   pendingRequests: 0,
   historyReady: false,
   questionGeneration: {
+    articleInit: "unknown",
     challenge: "unknown",
     postQuiz: "unknown",
   },
 };
+
+const ARTICLE_PAGE_SIZE = 6;
 
 const views = document.querySelectorAll(".view");
 const messageBox = document.getElementById("message-box");
@@ -56,6 +65,9 @@ const learningStats = document.getElementById("learning-stats");
 const libraryList = document.getElementById("library-list");
 const articleList = document.getElementById("article-list");
 const publicArticleList = document.getElementById("public-article-list");
+const myArticlePagination = document.getElementById("my-article-pagination");
+const publicArticlePagination = document.getElementById("public-article-pagination");
+const publicJLPTFilter = document.getElementById("public-jlpt-filter");
 const articleDetail = document.getElementById("article-detail");
 const sentenceList = document.getElementById("sentence-list");
 const readingHeader = document.getElementById("reading-header");
@@ -101,10 +113,14 @@ const openChallengeToolbarButton = document.getElementById("open-challenge-butto
 const openPostQuizToolbarButton = document.getElementById("open-post-quiz-button-toolbar");
 const keyVocabularyList = document.getElementById("key-vocabulary-list");
 const readingComprehensionList = document.getElementById("reading-comprehension-list");
+const regenerateKeyVocabularyButton = document.getElementById("regenerate-key-vocabulary-button");
+const appendReadingQuizButton = document.getElementById("append-reading-quiz-button");
 const readingQuizModal = document.getElementById("reading-quiz-modal");
 const readingQuizModalBody = document.getElementById("reading-quiz-modal-body");
 const readingQuizCloseButton = document.getElementById("reading-quiz-close-button");
 const questionGenerationPanel = document.getElementById("question-generation-panel");
+const articleInitGenerationBar = document.getElementById("article-init-generation-bar");
+const articleInitGenerationStatus = document.getElementById("article-init-generation-status");
 const challengeGenerationBar = document.getElementById("challenge-generation-bar");
 const challengeGenerationStatus = document.getElementById("challenge-generation-status");
 const postQuizGenerationBar = document.getElementById("post-quiz-generation-bar");
@@ -401,6 +417,22 @@ document.getElementById("jlpt-form").addEventListener("submit", async (event) =>
 document.getElementById("article-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const payload = Object.fromEntries(new FormData(event.currentTarget).entries());
+  showQuestionGenerationPanel(true);
+  setQuestionGenerationStatus("articleInit", "generating");
+  setQuestionGenerationStatus("challenge", "unknown");
+  setQuestionGenerationStatus("postQuiz", "unknown");
+  state.selectedArticleId = null;
+  state.readingArticle = null;
+  hideLookupPopup();
+  readingHeader.textContent = "文章正在上传并初始化...";
+  readingContent.innerHTML = `<div class="empty-state">正在处理文章内容，完成后会自动进入阅读。</div>`;
+  if (keyVocabularyList) {
+    keyVocabularyList.innerHTML = `<span class="meta">等待文章初始化完成后生成 JLPT 考点重点。</span>`;
+  }
+  if (readingComprehensionList) {
+    readingComprehensionList.innerHTML = `<span class="meta">等待文章初始化完成后生成阅读理解题。</span>`;
+  }
+  showView("reading");
   const result = await request("/api/articles/upload", {
     method: "POST",
     body: JSON.stringify(payload),
@@ -408,15 +440,15 @@ document.getElementById("article-form").addEventListener("submit", async (event)
     timeoutMs: 60000,
   });
   if (!result.ok) {
+    setQuestionGenerationStatus("articleInit", "failed");
     return;
   }
-  state.selectedArticleId = result.data.id;
-  await Promise.all([loadArticles(), loadPublicArticles()]);
-  showView("reading");
-  await loadReadingArticle(result.data.id);
-  startArticleQuestionGeneration(result.data.id);
-  setMessage("文章已创建并处理完成");
+  setQuestionGenerationStatus("articleInit", "ready");
   event.currentTarget.reset();
+  state.selectedArticleId = result.data.id;
+  await loadReadingArticle(result.data.id);
+  void Promise.all([loadArticles(), loadPublicArticles()]);
+  setMessage("文章已创建并处理完成");
 });
 
 reprocessButton.addEventListener("click", async () => {
@@ -433,7 +465,6 @@ reprocessButton.addEventListener("click", async () => {
     return;
   }
   await Promise.all([loadArticleDetail(state.selectedArticleId), loadArticles()]);
-  startArticleQuestionGeneration(state.selectedArticleId);
   setMessage("文章已重新处理");
 });
 
@@ -483,6 +514,35 @@ readingQuizModal?.addEventListener("mousedown", (event) => {
   }
 });
 
+regenerateKeyVocabularyButton?.addEventListener("click", async () => {
+  if (!state.selectedArticleId) {
+    setMessage("请先选择一篇文章");
+    return;
+  }
+  regenerateKeyVocabularyButton.disabled = true;
+  setQuestionGenerationStatus("challenge", "generating");
+  if (keyVocabularyList) {
+    keyVocabularyList.innerHTML = `<span class="meta">正在重新按 JLPT 考点分析重点词汇和语法...</span>`;
+  }
+  await generateQuestionSet(state.selectedArticleId, "challenge", { refresh: true });
+  regenerateKeyVocabularyButton.disabled = false;
+});
+
+appendReadingQuizButton?.addEventListener("click", async () => {
+  if (!state.selectedArticleId) {
+    setMessage("请先选择一篇文章");
+    return;
+  }
+  appendReadingQuizButton.disabled = true;
+  setQuestionGenerationStatus("postQuiz", "generating");
+  if (readingComprehensionList) {
+    readingComprehensionList.insertAdjacentHTML("beforeend", `<span class="meta" data-quiz-appending>正在追加 JLPT 阅读理解题...</span>`);
+  }
+  await generateQuestionSet(state.selectedArticleId, "postQuiz", { append: true });
+  document.querySelector("[data-quiz-appending]")?.remove();
+  appendReadingQuizButton.disabled = false;
+});
+
 addVocabularyButton.addEventListener("click", async () => {
   if (!state.lookup.currentEntry) {
     return;
@@ -512,8 +572,21 @@ addVocabularyButton.addEventListener("click", async () => {
 
 vocabularyFilterForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  state.vocabularyFilter = new FormData(event.currentTarget).get("status") || "";
+  const form = new FormData(event.currentTarget);
+  state.vocabularyFilter = form.get("status") || "";
+  state.vocabularySearch = form.get("q") || "";
   await loadVocabularyList();
+});
+
+publicJLPTFilter?.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-public-jlpt]");
+  if (!button) {
+    return;
+  }
+  state.publicJLPTFilter = button.dataset.publicJlpt || "";
+  state.publicArticlePage = 1;
+  publicJLPTFilter.querySelectorAll("[data-public-jlpt]").forEach((item) => item.classList.toggle("active", item === button));
+  renderPublicArticles();
 });
 
 vocabularyStatusButtons.forEach((button) => {
@@ -956,6 +1029,9 @@ function renderUser() {
   `;
   document.querySelector('#jlpt-form select[name="jlpt_level"]').value = state.user.jlpt_level;
   vocabularyFilterForm.elements.status.value = state.vocabularyFilter;
+  if (vocabularyFilterForm.elements.q) {
+    vocabularyFilterForm.elements.q.value = state.vocabularySearch;
+  }
   if (!state.selectedVocabularyId) {
     openVocabularyArticleButton.disabled = true;
   }
@@ -1118,9 +1194,16 @@ async function loadArticles() {
   if (!result.ok) {
     return;
   }
-  const items = result.data.items || [];
+  state.articles = result.data.items || [];
+  state.articlePage = clampPage(state.articlePage, state.articles.length);
+  renderMyArticles();
+}
+
+function renderMyArticles() {
+  const items = paginateItems(state.articles, state.articlePage);
   if (items.length === 0) {
     articleList.innerHTML = `<li class="empty-state">还没有上传文章。可以先去“上传文章”创建第一篇。</li>`;
+    renderPagination(myArticlePagination, 0, state.articlePage, () => {});
     return;
   }
   articleList.innerHTML = items
@@ -1131,7 +1214,7 @@ async function loadArticles() {
             <span class="article-card-title">${escapeHTML(article.title)}</span>
             <span><span class="tag">${escapeHTML(article.source_type || "mine")}</span> <span class="tag">${escapeHTML(article.translation_status || "-")}</span></span>
             <span class="meta">${escapeHTML(article.original_language || "-")} · ${article.sentence_count || 0} 句 · ${formatDateTime(article.updated_at || article.created_at)}</span>
-            <span class="meta">点击查看详情、阅读或重新处理。</span>
+            <span class="meta">${escapeHTML(article.chinese_translation || "点击查看详情、阅读或重新处理。")}</span>
           </button>
         </li>
       `,
@@ -1139,6 +1222,10 @@ async function loadArticles() {
     .join("");
 
   bindArticleSelection(articleList);
+  renderPagination(myArticlePagination, state.articles.length, state.articlePage, (page) => {
+    state.articlePage = page;
+    renderMyArticles();
+  });
 }
 
 async function loadPublicArticles() {
@@ -1150,9 +1237,20 @@ async function loadPublicArticles() {
   if (!result.ok) {
     return;
   }
-  const items = result.data.items || [];
+  state.publicArticles = result.data.items || [];
+  state.publicArticlePage = clampPage(state.publicArticlePage, filteredPublicArticles().length);
+  renderPublicArticles();
+}
+
+function renderPublicArticles() {
+  if (!publicArticleList) {
+    return;
+  }
+  const filteredItems = filteredPublicArticles();
+  const items = paginateItems(filteredItems, state.publicArticlePage);
   if (items.length === 0) {
-    publicArticleList.innerHTML = `<li class="empty-state">公共文章库暂时为空。</li>`;
+    publicArticleList.innerHTML = `<li class="empty-state">当前筛选下没有公共文章。</li>`;
+    renderPagination(publicArticlePagination, 0, state.publicArticlePage, () => {});
     return;
   }
   publicArticleList.innerHTML = items
@@ -1162,14 +1260,54 @@ async function loadPublicArticles() {
           <button class="article-card" data-article-id="${article.id}">
             <span class="article-card-title">${escapeHTML(article.title)}</span>
             <span><span class="tag">${escapeHTML(article.source_type || "-")}</span> <span class="badge badge-jlpt">${escapeHTML(article.jlpt_level || "-")}</span></span>
-            <span class="meta">${escapeHTML(article.original_language || "-")} · ${article.sentence_count || 0} 句 · ${formatDateTime(article.updated_at || article.created_at)}</span>
-            <span class="meta">公共本地文章，点击直接阅读。</span>
+            <span class="meta">${article.sentence_count || 0} 句 · ${formatDateTime(article.updated_at || article.created_at)}</span>
+            <span class="meta">${escapeHTML(article.chinese_translation || "这是一篇可直接学习的公共日语阅读文章。")}</span>
           </button>
         </li>
       `,
     )
     .join("");
   bindArticleSelection(publicArticleList);
+  renderPagination(publicArticlePagination, filteredItems.length, state.publicArticlePage, (page) => {
+    state.publicArticlePage = page;
+    renderPublicArticles();
+  });
+}
+
+function filteredPublicArticles() {
+  const level = state.publicJLPTFilter;
+  return level ? state.publicArticles.filter((article) => article.jlpt_level === level) : state.publicArticles;
+}
+
+function paginateItems(items, page) {
+  const start = (page - 1) * ARTICLE_PAGE_SIZE;
+  return items.slice(start, start + ARTICLE_PAGE_SIZE);
+}
+
+function clampPage(page, itemCount) {
+  return Math.max(1, Math.min(page || 1, Math.max(1, Math.ceil(itemCount / ARTICLE_PAGE_SIZE))));
+}
+
+function renderPagination(container, itemCount, currentPage, onPageChange) {
+  if (!container) {
+    return;
+  }
+  const totalPages = Math.ceil(itemCount / ARTICLE_PAGE_SIZE);
+  if (totalPages <= 1) {
+    container.innerHTML = "";
+    return;
+  }
+  container.innerHTML = `
+    <button class="btn btn-ghost compact" type="button" data-page="prev" ${currentPage <= 1 ? "disabled" : ""}>上一页</button>
+    <span class="meta">第 ${currentPage} / ${totalPages} 页</span>
+    <button class="btn btn-ghost compact" type="button" data-page="next" ${currentPage >= totalPages ? "disabled" : ""}>下一页</button>
+  `;
+  container.querySelectorAll("[data-page]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const nextPage = button.dataset.page === "prev" ? currentPage - 1 : currentPage + 1;
+      onPageChange(clampPage(nextPage, itemCount));
+    });
+  });
 }
 
 async function loadArticleDetail(articleId) {
@@ -1237,6 +1375,7 @@ async function refreshQuestionGenerationReadiness(articleId) {
     return;
   }
   showQuestionGenerationPanel(true);
+  setQuestionGenerationStatus("articleInit", "ready");
   setQuestionGenerationStatus("challenge", "checking");
   setQuestionGenerationStatus("postQuiz", "checking");
   const [challengeResult, postQuizResult] = await Promise.all([
@@ -1253,6 +1392,20 @@ async function refreshQuestionGenerationReadiness(articleId) {
     state.postQuiz.questions = postQuizResult.data.items || [];
     renderReadingComprehensionList();
   }
+  if (!challengeResult.ok || (challengeResult.data.items || []).length === 0) {
+    setQuestionGenerationStatus("challenge", "generating");
+    if (keyVocabularyList) {
+      keyVocabularyList.innerHTML = `<span class="meta">尚未生成 JLPT 考点重点，正在自动生成...</span>`;
+    }
+    void generateQuestionSet(articleId, "challenge");
+  }
+  if (!postQuizResult.ok || (postQuizResult.data.items || []).length === 0) {
+    setQuestionGenerationStatus("postQuiz", "generating");
+    if (readingComprehensionList) {
+      readingComprehensionList.innerHTML = `<span class="meta">尚未生成阅读理解题，正在自动生成...</span>`;
+    }
+    void generateQuestionSet(articleId, "postQuiz");
+  }
   hideQuestionGenerationPanelIfReady();
 }
 
@@ -1261,22 +1414,41 @@ function startArticleQuestionGeneration(articleId) {
     return;
   }
   showQuestionGenerationPanel(true);
+  state.challenge.questions = [];
+  state.postQuiz.questions = [];
+  if (keyVocabularyList) {
+    keyVocabularyList.innerHTML = `<span class="meta">AI 正在按 JLPT 考点分析重点词汇和语法，生成后会自动显示在文章底部。</span>`;
+  }
+  if (readingComprehensionList) {
+    readingComprehensionList.innerHTML = `<span class="meta">AI 正在生成阅读理解题，生成后会自动显示。</span>`;
+  }
   setQuestionGenerationStatus("challenge", "generating");
   setQuestionGenerationStatus("postQuiz", "generating");
   void generateQuestionSet(articleId, "challenge");
   void generateQuestionSet(articleId, "postQuiz");
 }
 
-async function generateQuestionSet(articleId, type) {
-  const endpoint =
+async function generateQuestionSet(articleId, type, options = {}) {
+  const query = new URLSearchParams();
+  if (options.refresh) {
+    query.set("refresh", "1");
+  }
+  if (options.append) {
+    query.set("append", "1");
+  }
+  const baseEndpoint =
     type === "challenge"
       ? `/api/reading/articles/${articleId}/challenge-questions`
       : `/api/reading/articles/${articleId}/post-quiz`;
+  const endpoint = query.toString() ? `${baseEndpoint}?${query.toString()}` : baseEndpoint;
   const result = await request(endpoint, {
     method: "POST",
     timeoutMs: 120000,
     silent: true,
   });
+  if (state.selectedArticleId !== articleId) {
+    return;
+  }
   setQuestionGenerationStatus(type, result.ok && (result.data.items || []).length > 0 ? "ready" : "failed");
   if (result.ok) {
     if (type === "challenge") {
@@ -1295,16 +1467,15 @@ function showQuestionGenerationPanel(visible) {
 }
 
 function hideQuestionGenerationPanelIfReady() {
-  if (state.questionGeneration.challenge === "ready" && state.questionGeneration.postQuiz === "ready") {
+  if (state.questionGeneration.articleInit !== "generating" && state.questionGeneration.challenge === "ready" && state.questionGeneration.postQuiz === "ready") {
     window.setTimeout(() => showQuestionGenerationPanel(false), 800);
   }
 }
 
 function setQuestionGenerationStatus(type, status) {
   state.questionGeneration[type] = status;
-  const isChallenge = type === "challenge";
-  const bar = isChallenge ? challengeGenerationBar : postQuizGenerationBar;
-  const label = isChallenge ? challengeGenerationStatus : postQuizGenerationStatus;
+  const bar = type === "articleInit" ? articleInitGenerationBar : type === "challenge" ? challengeGenerationBar : postQuizGenerationBar;
+  const label = type === "articleInit" ? articleInitGenerationStatus : type === "challenge" ? challengeGenerationStatus : postQuizGenerationStatus;
   const statusMeta = {
     checking: ["检测中", 35],
     pending: ["未生成", 0],
@@ -1344,7 +1515,7 @@ function renderKeyVocabularyRecommendations() {
   }
   const items = state.challenge.questions || [];
   if (items.length === 0) {
-    keyVocabularyList.innerHTML = `<span class="meta">暂无重点词汇或语法推荐。</span>`;
+    keyVocabularyList.innerHTML = `<span class="meta">暂无 JLPT 考点重点词汇或语法推荐。</span>`;
     return;
   }
   const vocabularyItems = items.filter((item) => recommendationKind(item) !== "grammar").slice(0, 5);
@@ -1363,7 +1534,7 @@ function renderKeyVocabularyRecommendations() {
           <div class="key-vocab-meta">
             <span class="badge badge-jlpt">${escapeHTML(item.option_a || item.jlpt_level || "unknown")}</span>
             <span class="tag">频次 ${escapeHTML(item.option_b || "-")}</span>
-            <span class="tag">重要度 ${escapeHTML(item.option_c || "-")}</span>
+            <span class="tag">考点重要度 ${escapeHTML(item.option_c || "-")}</span>
             <span class="tag">${recommendationKind(item) === "grammar" ? "文法" : "词汇"}</span>
           </div>
           <span class="meta">${escapeHTML(item.explanation || item.option_d || "")}</span>
@@ -1377,7 +1548,7 @@ function renderKeyVocabularyRecommendations() {
   `;
   keyVocabularyList.innerHTML = [
     renderGroup("重点词汇", vocabularyItems, "暂无重点词汇推荐。"),
-    renderGroup("重点语法", grammarItems, "暂无重点语法推荐。"),
+    renderGroup("重点语法 / 固定用法", grammarItems, "暂无重点语法推荐。"),
   ].join("");
   keyVocabularyList.querySelectorAll("[data-add-key-vocab]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -1837,7 +2008,14 @@ function vocabularyStatusLabel(status) {
 }
 
 async function loadVocabularyList() {
-  const suffix = state.vocabularyFilter ? `?status=${encodeURIComponent(state.vocabularyFilter)}` : "";
+  const params = new URLSearchParams();
+  if (state.vocabularyFilter) {
+    params.set("status", state.vocabularyFilter);
+  }
+  if (state.vocabularySearch) {
+    params.set("q", state.vocabularySearch);
+  }
+  const suffix = params.toString() ? `?${params.toString()}` : "";
   vocabularyList.innerHTML = `<li class="empty-state">正在加载生词本...</li>`;
   await request("/api/review/prewarm", {
     method: "POST",
@@ -1852,7 +2030,7 @@ async function loadVocabularyList() {
   state.selectedVocabularyIds = new Set([...state.selectedVocabularyIds].filter((id) => items.some((detail) => detail.item.id === id)));
   updateVocabularyBatchState();
   if (items.length === 0) {
-    vocabularyList.innerHTML = `<li class="empty-state">当前筛选下没有生词。阅读文章时框选词语即可加入。</li>`;
+    vocabularyList.innerHTML = `<li class="empty-state">当前筛选或搜索下没有生词。阅读文章时框选词语即可加入。</li>`;
     return;
   }
   vocabularyList.innerHTML = items
