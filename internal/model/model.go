@@ -102,6 +102,17 @@ type DictionaryEntry struct {
 	UpdatedAt            time.Time `json:"updated_at"`
 }
 
+type DictionaryExample struct {
+	ID                   int64     `json:"id"`
+	DictionaryEntryID    int64     `json:"dictionary_entry_id"`
+	ExampleSentence      string    `json:"example_sentence"`
+	ExampleTranslationZH *string   `json:"example_translation_zh,omitempty"`
+	Source               string    `json:"source"`
+	AIModel              *string   `json:"ai_model,omitempty"`
+	PromptVersion        *string   `json:"prompt_version,omitempty"`
+	CreatedAt            time.Time `json:"created_at"`
+}
+
 type VocabularyStatus string
 
 const (

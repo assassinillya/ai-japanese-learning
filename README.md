@@ -1,6 +1,6 @@
-# ai-japanese-learning v1.2
+# ai-japanese-learning v1.3
 
-当前版本已经从 `v1.1` 推进到 `v1.2`，新增可配置 AI 接入接口和各类 AI Prompt 模板，同时继续保留占位生成器作为 fallback。
+当前版本已经推进到 `v1.3`，新增公共文章库、可拖动查词弹窗、AI 例句管理，并继续保留多供应商 AI 接入和本地缓存复用能力。
 
 已完成：
 
@@ -60,6 +60,9 @@
 - MVP 测试数据 `seeds/002_mvp_seed_v09.sql`
 - 静态前端页面：登录、注册、首页、个人中心、文章上传、文章详情、阅读模式、查词弹窗
 - 静态前端 UI 重构：统一左侧导航、页面 Header、卡片、按钮、Badge、Toast、阅读页、查词弹窗、生词本、复习页和统计概览视觉系统
+- 公共文章库：处理完成的本地文章可被其他用户直接阅读学习
+- 查词弹窗可拖动，并根据屏幕上下空间动态定位
+- 生词详情 AI 例句管理：最多 3 句，可生成和删除
 
 ## 版本记录
 
@@ -148,6 +151,13 @@
   - `mastered` 状态明确作为“熟练/已经学会”，熟练词会从后续待复习队列中移出。
   - 词汇复习卡新增“标记熟练”按钮，点击后当前词直接移出复习队列并跳到下一词。
   - 新增 `POST /api/vocabulary/batch/status` 和 `POST /api/vocabulary/batch/delete`。
+- `v1.3`
+  - 查词弹窗支持拖动，并会根据选区距离顶部/底部自动选择向上或向下展开。
+  - 文章库新增公共文章区，用户上传并处理完成的本地文章可被其他用户直接点击学习。
+  - 我的文章和公共文章点击后直接进入阅读模式，不再先进入文章详情。
+  - 挑战阅读、阅读后测验继续复用按文章入库的公共题目缓存；词汇复习继续复用按词典条目入库的公共复习题缓存。
+  - 生词详情新增 AI 例句管理：每次生成 1 句，最多 3 句，可删除后继续生成。
+  - 新增 `GET /api/articles/public`、`GET /api/dictionary/{id}/examples`、`POST /api/dictionary/examples/generate`、`DELETE /api/dictionary/examples/{id}`。
 
 后续每次功能或结构改动，都需要同步更新 `README.md` 的版本记录和当前说明。
 
@@ -498,3 +508,14 @@ docker compose up --build
 - `GOCACHE=D:\project\ai-japanese-learning\.gocache go test ./...` 通过。
 - 熟练状态 `mastered` 已从 `GET /api/review/due` 的待复习查询中排除。
 - 生词本批量接口 `POST /api/vocabulary/batch/status`、`POST /api/vocabulary/batch/delete` 可按当前用户限制批量操作。
+
+## v1.3 公共学习库与例句验证记录
+
+本轮补齐公共文章学习、查词弹窗交互和 AI 例句管理。
+
+已验证：
+
+- `node --check internal/web/assets/app.js` 通过。
+- `GOCACHE=D:\project\ai-japanese-learning\.gocache go test ./...` 通过。
+- 本地烟测上传文章后 `GET /api/articles/public` 可返回公共文章。
+- 本地烟测 `POST /api/dictionary/examples/generate` 可生成 1 条例句，`GET /api/dictionary/{id}/examples` 可查询，`DELETE /api/dictionary/examples/{id}` 可删除。

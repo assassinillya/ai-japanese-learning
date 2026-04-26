@@ -39,6 +39,31 @@ func promptDictionaryEntry(text string) AIPrompt {
 	}
 }
 
+func promptDictionaryExample(entry model.DictionaryEntry, existing []model.DictionaryExample) AIPrompt {
+	raw, _ := json.Marshal(existing)
+	return AIPrompt{
+		System: "你是日语例句生成器。只返回合法 JSON，不要 Markdown。例句必须自然、简短，适合中文用户学习。",
+		User: fmt.Sprintf(`请为下面日语词条生成 1 个新的日语例句，避免与已有例句重复。
+
+词条：
+- surface: %s
+- lemma: %s
+- reading: %s
+- part_of_speech: %s
+- meaning_zh: %s
+- jlpt_level: %s
+
+已有例句 JSON：
+%s
+
+返回 JSON 格式：
+{
+  "example_sentence": "包含该词的自然日语例句",
+  "example_translation_zh": "例句中文翻译"
+}`, entry.Surface, entry.Lemma, entry.Reading, entry.PartOfSpeech, entry.MeaningZH, entry.JLPTLevel, string(raw)),
+	}
+}
+
 func promptArticleTranslation(language, content string, level model.JLPTLevel) AIPrompt {
 	return AIPrompt{
 		System: "你是面向中文用户的日语学习文章改写/翻译器。只返回合法 JSON，不要 Markdown，不要额外解释。",

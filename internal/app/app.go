@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"database/sql"
 
 	"ai-japanese-learning/internal/config"
@@ -25,6 +26,10 @@ func New(cfg *config.Config) (*App, error) {
 	userRepo := repository.NewUserRepository(postgres)
 	articleRepo := repository.NewArticleRepository(postgres)
 	dictionaryRepo := repository.NewDictionaryRepository(postgres)
+	if err := dictionaryRepo.EnsureExampleTable(context.Background()); err != nil {
+		_ = postgres.Close()
+		return nil, err
+	}
 	vocabularyRepo := repository.NewVocabularyRepository(postgres)
 	challengeRepo := repository.NewChallengeRepository(postgres)
 	reviewRepo := repository.NewReviewRepository(postgres)

@@ -20,6 +20,25 @@ func NewDictionaryRepository(db *sql.DB) *DictionaryRepository {
 	return &DictionaryRepository{db: db}
 }
 
+func (r *DictionaryRepository) EnsureExampleTable(ctx context.Context) error {
+	_, err := r.db.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS dictionary_examples (
+			id BIGSERIAL PRIMARY KEY,
+			dictionary_entry_id BIGINT NOT NULL REFERENCES dictionary_entries(id) ON DELETE CASCADE,
+			example_sentence TEXT NOT NULL,
+			example_translation_zh TEXT,
+			source TEXT NOT NULL CHECK (source IN ('ai', 'admin', 'builtin')),
+			ai_model TEXT,
+			prompt_version TEXT,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)
+	`)
+	if err != nil {
+		return fmt.Errorf("ensure dictionary examples table: %w", err)
+	}
+	return nil
+}
+
 func (r *DictionaryRepository) FindByText(ctx context.Context, text string) (*model.DictionaryEntry, error) {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT id, surface, lemma, reading, romaji, part_of_speech, meaning_zh, meaning_ja, meaning_en,
@@ -147,6 +166,58 @@ func (r *DictionaryRepository) ListDistractors(ctx context.Context, excludeID in
 	return entries, rows.Err()
 }
 
+func (r *DictionaryRepository) ListExamples(ctx context.Context, entryID int64) ([]model.DictionaryExample, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, dictionary_entry_id, example_sentence, example_translation_zh, source, ai_model, prompt_version, created_at
+		FROM dictionary_examples
+		WHERE dictionary_entry_id = $1
+		ORDER BY created_at ASC, id ASC
+	`, entryID)
+	if err != nil {
+		return nil, fmt.Errorf("list dictionary examples: %w", err)
+	}
+	defer rows.Close()
+	var examples []model.DictionaryExample
+	for rows.Next() {
+		example, err := scanDictionaryExample(rows)
+		if err != nil {
+			return nil, err
+		}
+		examples = append(examples, *example)
+	}
+	return examples, rows.Err()
+}
+
+func (r *DictionaryRepository) CreateExample(ctx context.Context, example *model.DictionaryExample) (*model.DictionaryExample, error) {
+	err := r.db.QueryRowContext(ctx, `
+		INSERT INTO dictionary_examples (
+			dictionary_entry_id, example_sentence, example_translation_zh, source, ai_model, prompt_version
+		)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING id, created_at
+	`, example.DictionaryEntryID, example.ExampleSentence, example.ExampleTranslationZH, example.Source, example.AIModel, example.PromptVersion).
+		Scan(&example.ID, &example.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("create dictionary example: %w", err)
+	}
+	return example, nil
+}
+
+func (r *DictionaryRepository) DeleteExample(ctx context.Context, exampleID int64) error {
+	result, err := r.db.ExecContext(ctx, `DELETE FROM dictionary_examples WHERE id = $1`, exampleID)
+	if err != nil {
+		return fmt.Errorf("delete dictionary example: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected for delete dictionary example: %w", err)
+	}
+	if rows == 0 {
+		return ErrDictionaryEntryNotFound
+	}
+	return nil
+}
+
 type dictionaryEntryScanner interface {
 	Scan(dest ...any) error
 }
@@ -180,4 +251,21 @@ func scanDictionaryEntry(scanner dictionaryEntryScanner) (*model.DictionaryEntry
 		return nil, err
 	}
 	return &entry, nil
+}
+
+func scanDictionaryExample(scanner dictionaryEntryScanner) (*model.DictionaryExample, error) {
+	var example model.DictionaryExample
+	if err := scanner.Scan(
+		&example.ID,
+		&example.DictionaryEntryID,
+		&example.ExampleSentence,
+		&example.ExampleTranslationZH,
+		&example.Source,
+		&example.AIModel,
+		&example.PromptVersion,
+		&example.CreatedAt,
+	); err != nil {
+		return nil, err
+	}
+	return &example, nil
 }

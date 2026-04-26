@@ -154,10 +154,18 @@
 
         <section class="view" id="view-articles">
           <header class="page-header">
-            <div><h2 class="page-title">我的文章</h2><p class="page-subtitle">管理上传内容和阅读入口。</p></div>
+            <div><h2 class="page-title">文章库</h2><p class="page-subtitle">查看我的上传和别人公开上传的文章，点击即可进入阅读。</p></div>
             <button class="btn btn-primary" data-view="upload">上传文章</button>
           </header>
-          <ul id="article-list" class="list article-grid"></ul>
+          <section class="card article-section">
+            <h3>我的文章</h3>
+            <ul id="article-list" class="list article-grid"></ul>
+          </section>
+          <section class="card article-section">
+            <h3>公共文章</h3>
+            <p class="muted">所有用户上传并处理完成的文章都会进入公共本地文章库，可直接学习。</p>
+            <ul id="public-article-list" class="list article-grid"></ul>
+          </section>
         </section>
 
         <section class="view" id="view-upload">

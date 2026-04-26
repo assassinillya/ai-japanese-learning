@@ -746,6 +746,38 @@ label {
   padding-top: 18px;
 }
 
+.vocabulary-item > span:first-child {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.dictionary-examples-panel {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-border);
+}
+
+.dictionary-example-list {
+  display: grid;
+  gap: 10px;
+}
+
+.dictionary-example-item {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: rgba(248, 250, 252, 0.9);
+}
+
+.article-section {
+  max-width: 1180px;
+  margin: 0 auto 18px;
+}
+
 .status-new { background: #dbeafe; color: #2563eb; }
 .status-learning { background: #ffedd5; color: #ea580c; }
 .status-reviewing { background: #ede9fe; color: #7c3aed; }
@@ -775,6 +807,12 @@ label {
   margin-bottom: 12px;
   font-size: 18px;
   font-weight: 850;
+  cursor: move;
+  user-select: none;
+}
+
+.lookup-popup-card.dragging {
+  transition: none;
 }
 
 .lookup-body {

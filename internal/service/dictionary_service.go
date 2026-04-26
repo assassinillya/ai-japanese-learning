@@ -15,6 +15,11 @@ type DictionaryService struct {
 	aiService      *AIService
 }
 
+type dictionaryExampleAIResponse struct {
+	ExampleSentence      string `json:"example_sentence"`
+	ExampleTranslationZH string `json:"example_translation_zh"`
+}
+
 func NewDictionaryService(dictionaryRepo *repository.DictionaryRepository, aiService *AIService) *DictionaryService {
 	return &DictionaryService{
 		dictionaryRepo: dictionaryRepo,
@@ -65,6 +70,71 @@ func (s *DictionaryService) LookupOrGenerate(ctx context.Context, text string) (
 
 func (s *DictionaryService) GetByID(ctx context.Context, entryID int64) (*model.DictionaryEntry, error) {
 	return s.dictionaryRepo.GetByID(ctx, entryID)
+}
+
+func (s *DictionaryService) ListExamples(ctx context.Context, entryID int64) ([]model.DictionaryExample, error) {
+	if _, err := s.dictionaryRepo.GetByID(ctx, entryID); err != nil {
+		return nil, err
+	}
+	return s.dictionaryRepo.ListExamples(ctx, entryID)
+}
+
+func (s *DictionaryService) GenerateExample(ctx context.Context, entryID int64) (*model.DictionaryExample, error) {
+	entry, err := s.dictionaryRepo.GetByID(ctx, entryID)
+	if err != nil {
+		return nil, err
+	}
+	existing, err := s.dictionaryRepo.ListExamples(ctx, entryID)
+	if err != nil {
+		return nil, err
+	}
+	if len(existing) >= 3 {
+		return nil, fmt.Errorf("最多只能生成 3 句例句，请先删除旧例句")
+	}
+
+	const (
+		taskType      = "dictionary_example"
+		fallbackModel = "placeholder-dictionary-example-generator"
+		promptVersion = aiPromptVersionV12
+	)
+	modelName := fallbackModel
+	source := "ai"
+	var parsed dictionaryExampleAIResponse
+	if s.aiService != nil && s.aiService.ProviderAvailable() {
+		modelName = s.aiService.ModelName(fallbackModel)
+		prompt := promptDictionaryExample(*entry, existing)
+		request := map[string]any{"entry_id": entryID, "existing_count": len(existing), "prompt": prompt}
+		raw, err := s.aiService.CompleteJSON(ctx, prompt)
+		if err != nil {
+			s.aiService.LogFailure(ctx, taskType, request, err, modelName, promptVersion)
+		} else if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+			s.aiService.LogFailure(ctx, taskType, request, err, modelName, promptVersion)
+		}
+	}
+	if strings.TrimSpace(parsed.ExampleSentence) == "" {
+		index := len(existing) + 1
+		parsed.ExampleSentence = fmt.Sprintf("%sを使った例文%dです。", entry.Surface, index)
+		parsed.ExampleTranslationZH = fmt.Sprintf("这是使用「%s」的例句 %d。", entry.Surface, index)
+		modelName = fallbackModel
+	}
+	translation := strings.TrimSpace(parsed.ExampleTranslationZH)
+	aiModel := modelName
+	prompt := promptVersion
+	return s.dictionaryRepo.CreateExample(ctx, &model.DictionaryExample{
+		DictionaryEntryID:    entryID,
+		ExampleSentence:      strings.TrimSpace(parsed.ExampleSentence),
+		ExampleTranslationZH: &translation,
+		Source:               source,
+		AIModel:              &aiModel,
+		PromptVersion:        &prompt,
+	})
+}
+
+func (s *DictionaryService) DeleteExample(ctx context.Context, exampleID int64) error {
+	if exampleID <= 0 {
+		return fmt.Errorf("invalid example id")
+	}
+	return s.dictionaryRepo.DeleteExample(ctx, exampleID)
 }
 
 func (s *DictionaryService) generateDictionaryEntry(ctx context.Context, text string) (*model.DictionaryEntry, error) {

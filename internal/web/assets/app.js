@@ -34,6 +34,7 @@ const state = {
     currentGenerated: false,
     lastLookupKey: "",
     inFlightKey: "",
+    drag: null,
   },
   pendingRequests: 0,
 };
@@ -48,6 +49,7 @@ const profileSummary = document.getElementById("profile-summary");
 const learningStats = document.getElementById("learning-stats");
 const libraryList = document.getElementById("library-list");
 const articleList = document.getElementById("article-list");
+const publicArticleList = document.getElementById("public-article-list");
 const articleDetail = document.getElementById("article-detail");
 const sentenceList = document.getElementById("sentence-list");
 const readingHeader = document.getElementById("reading-header");
@@ -385,8 +387,9 @@ document.getElementById("article-form").addEventListener("submit", async (event)
     return;
   }
   state.selectedArticleId = result.data.id;
-  await Promise.all([loadArticles(), loadArticleDetail(result.data.id)]);
-  showView("detail");
+  await Promise.all([loadArticles(), loadPublicArticles()]);
+  showView("reading");
+  await loadReadingArticle(result.data.id);
   setMessage("文章已创建并处理完成");
   event.currentTarget.reset();
 });
@@ -773,6 +776,36 @@ document.addEventListener("mousedown", (event) => {
   }
 });
 
+popupTitle.addEventListener("mousedown", (event) => {
+  if (popup.classList.contains("hidden")) {
+    return;
+  }
+  const rect = popupCard.getBoundingClientRect();
+  state.lookup.drag = {
+    offsetX: event.clientX - rect.left,
+    offsetY: event.clientY - rect.top,
+  };
+  popupCard.classList.add("dragging");
+  event.preventDefault();
+});
+
+document.addEventListener("mousemove", (event) => {
+  if (!state.lookup.drag) {
+    return;
+  }
+  const width = popupCard.offsetWidth || 360;
+  const height = popupCard.offsetHeight || 260;
+  const left = clamp(event.clientX - state.lookup.drag.offsetX, 12, window.innerWidth - width - 12);
+  const top = clamp(event.clientY - state.lookup.drag.offsetY, 12, window.innerHeight - height - 12);
+  popupCard.style.left = `${left}px`;
+  popupCard.style.top = `${top}px`;
+});
+
+document.addEventListener("mouseup", () => {
+  state.lookup.drag = null;
+  popupCard.classList.remove("dragging");
+});
+
 document.addEventListener("selectionchange", () => {
   const selection = window.getSelection();
   if (!selection || selection.isCollapsed) {
@@ -785,7 +818,7 @@ async function bootstrap() {
     const me = await request("/api/auth/me");
     if (me.ok) {
       state.user = me.data;
-      await Promise.all([loadLibrary(), loadArticles(), loadVocabularyList()]);
+      await Promise.all([loadLibrary(), loadArticles(), loadPublicArticles(), loadVocabularyList()]);
     } else {
       localStorage.removeItem("access_token");
       state.token = "";
@@ -811,6 +844,9 @@ function renderUser() {
     learningStats.textContent = "请先登录后查看学习统计。";
     libraryList.innerHTML = "";
     articleList.innerHTML = "";
+    if (publicArticleList) {
+      publicArticleList.innerHTML = "";
+    }
     articleDetail.textContent = "请选择一篇文章。";
     sentenceList.innerHTML = "";
     readingHeader.textContent = "请选择一篇文章进入阅读。";
@@ -861,7 +897,7 @@ function handleAuthResult(result, successMessage) {
   state.user = result.data.user;
   localStorage.setItem("access_token", state.token);
   renderUser();
-  Promise.all([loadLibrary(), loadArticles(), loadVocabularyList()]);
+  Promise.all([loadLibrary(), loadArticles(), loadPublicArticles(), loadVocabularyList()]);
   setMessage(successMessage);
 }
 
@@ -1030,6 +1066,37 @@ async function loadArticles() {
     .join("");
 
   bindArticleSelection(articleList);
+}
+
+async function loadPublicArticles() {
+  if (!publicArticleList) {
+    return;
+  }
+  publicArticleList.innerHTML = `<li class="empty-state">正在加载公共文章...</li>`;
+  const result = await request("/api/articles/public");
+  if (!result.ok) {
+    return;
+  }
+  const items = result.data.items || [];
+  if (items.length === 0) {
+    publicArticleList.innerHTML = `<li class="empty-state">公共文章库暂时为空。</li>`;
+    return;
+  }
+  publicArticleList.innerHTML = items
+    .map(
+      (article) => `
+        <li>
+          <button class="article-card" data-article-id="${article.id}">
+            <span class="article-card-title">${escapeHTML(article.title)}</span>
+            <span><span class="tag">${escapeHTML(article.source_type || "-")}</span> <span class="badge badge-jlpt">${escapeHTML(article.jlpt_level || "-")}</span></span>
+            <span class="meta">${escapeHTML(article.original_language || "-")} · ${article.sentence_count || 0} 句 · ${formatDateTime(article.updated_at || article.created_at)}</span>
+            <span class="meta">公共本地文章，点击直接阅读。</span>
+          </button>
+        </li>
+      `,
+    )
+    .join("");
+  bindArticleSelection(publicArticleList);
 }
 
 async function loadArticleDetail(articleId) {
@@ -1444,16 +1511,91 @@ async function loadVocabularyDetail(vocabularyId) {
     <p><strong>上下文</strong><br>${escapeHTML(detail.example_sentence || detail.item.source_sentence_text || "-")}</p>
     <p class="meta">来源文章：${escapeHTML(detail.article_title || "-")} · 查询原文：${escapeHTML(detail.item.selected_text || "-")}</p>
     <p class="meta">词典例句：${escapeHTML(detail.dictionary_entry.example_sentence || "-")}</p>
+    <div class="dictionary-examples-panel">
+      <div class="detail-actions">
+        <strong>AI 例句</strong>
+        <button class="btn btn-secondary compact" data-generate-example="${detail.dictionary_entry.id}" type="button">AI 生成例句</button>
+      </div>
+      <div id="dictionary-example-list" class="dictionary-example-list">正在加载例句...</div>
+    </div>
   `;
   openVocabularyArticleButton.disabled = !detail.item.article_id;
+  vocabularyDetail.querySelector("[data-generate-example]")?.addEventListener("click", async () => {
+    await generateDictionaryExample(detail.dictionary_entry.id);
+  });
+  await loadDictionaryExamples(detail.dictionary_entry.id);
+}
+
+async function loadDictionaryExamples(entryId) {
+  const container = document.getElementById("dictionary-example-list");
+  if (!container) {
+    return;
+  }
+  const result = await request(`/api/dictionary/${entryId}/examples`);
+  if (!result.ok) {
+    container.textContent = "例句加载失败。";
+    return;
+  }
+  renderDictionaryExamples(result.data.items || [], entryId);
+}
+
+function renderDictionaryExamples(items, entryId) {
+  const container = document.getElementById("dictionary-example-list");
+  if (!container) {
+    return;
+  }
+  if (items.length === 0) {
+    container.innerHTML = `<div class="empty-state">还没有额外例句。每次点击可生成 1 句，最多 3 句。</div>`;
+    return;
+  }
+  container.innerHTML = items
+    .map(
+      (item, index) => `
+        <div class="dictionary-example-item">
+          <span class="tag">${index + 1}/3</span>
+          <strong>${escapeHTML(item.example_sentence)}</strong>
+          <span class="meta">${escapeHTML(item.example_translation_zh || "-")}</span>
+          <button class="btn btn-ghost compact" data-delete-example="${item.id}" type="button">删除</button>
+        </div>
+      `,
+    )
+    .join("");
+  container.querySelectorAll("[data-delete-example]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const result = await request(`/api/dictionary/examples/${button.dataset.deleteExample}`, {
+        method: "DELETE",
+        loadingMessage: "正在删除例句...",
+      });
+      if (!result.ok) {
+        return;
+      }
+      await loadDictionaryExamples(entryId);
+      setMessage("例句已删除");
+    });
+  });
+}
+
+async function generateDictionaryExample(entryId) {
+  const result = await request("/api/dictionary/examples/generate", {
+    method: "POST",
+    body: JSON.stringify({ dictionary_entry_id: entryId }),
+    loadingMessage: "正在生成 AI 例句...",
+    timeoutMs: 60000,
+  });
+  if (!result.ok) {
+    return;
+  }
+  await loadDictionaryExamples(entryId);
+  setMessage("已生成 1 句 AI 例句");
 }
 
 function bindArticleSelection(container) {
   container.querySelectorAll("[data-article-id]").forEach((button) => {
     button.addEventListener("click", async () => {
       const articleId = Number(button.dataset.articleId);
-      await loadArticleDetail(articleId);
-      showView("detail");
+      state.selectedArticleId = articleId;
+      showView("reading");
+      await loadReadingArticle(articleId);
     });
   });
 }
@@ -1622,10 +1764,15 @@ async function refreshVocabularyButton(entryId) {
 }
 
 function positionPopup(rect) {
-  const top = Math.min(window.innerHeight - 220, rect.bottom + 12);
-  const left = Math.min(window.innerWidth - 380, rect.left);
-  popupCard.style.top = `${Math.max(12, top)}px`;
-  popupCard.style.left = `${Math.max(12, left)}px`;
+  const width = popupCard.offsetWidth || 380;
+  const height = popupCard.offsetHeight || 280;
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const spaceAbove = rect.top;
+  const shouldOpenAbove = spaceBelow < height + 24 && spaceAbove > spaceBelow;
+  const top = shouldOpenAbove ? rect.top - height - 12 : rect.bottom + 12;
+  const left = rect.left + width > window.innerWidth ? window.innerWidth - width - 12 : rect.left;
+  popupCard.style.top = `${clamp(top, 12, window.innerHeight - height - 12)}px`;
+  popupCard.style.left = `${clamp(left, 12, window.innerWidth - width - 12)}px`;
 }
 
 function hideLookupPopup() {
@@ -1809,6 +1956,10 @@ function formatDateTime(value) {
     return String(value);
   }
   return date.toLocaleString();
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), Math.max(min, max));
 }
 
 bootstrap();

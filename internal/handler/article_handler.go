@@ -36,6 +36,15 @@ func (r *Router) handleMyArticles(w http.ResponseWriter, req *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"items": articles})
 }
 
+func (r *Router) handlePublicArticles(w http.ResponseWriter, req *http.Request) {
+	articles, err := r.articleService.ListPublic(req.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": articles})
+}
+
 func (r *Router) handleCreateArticle(w http.ResponseWriter, req *http.Request) {
 	user, err := currentUser(req.Context())
 	if err != nil {

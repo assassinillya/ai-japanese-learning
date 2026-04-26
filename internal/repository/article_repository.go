@@ -69,14 +69,39 @@ func (r *ArticleRepository) ListByUser(ctx context.Context, userID int64) ([]mod
 	return articles, rows.Err()
 }
 
+func (r *ArticleRepository) ListPublic(ctx context.Context) ([]model.Article, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, user_id, title, original_language, original_content, japanese_content, chinese_translation,
+		       jlpt_level, source_type, is_ai_generated, is_verified, translation_status,
+		       processing_notes, sentence_count, created_at, updated_at
+		FROM articles
+		WHERE translation_status = 'done'
+		ORDER BY updated_at DESC, created_at DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("list public articles: %w", err)
+	}
+	defer rows.Close()
+
+	var articles []model.Article
+	for rows.Next() {
+		article, err := scanArticle(rows)
+		if err != nil {
+			return nil, err
+		}
+		articles = append(articles, *article)
+	}
+	return articles, rows.Err()
+}
+
 func (r *ArticleRepository) GetAccessible(ctx context.Context, userID, articleID int64) (*model.Article, error) {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT id, user_id, title, original_language, original_content, japanese_content, chinese_translation,
 		       jlpt_level, source_type, is_ai_generated, is_verified, translation_status,
 		       processing_notes, sentence_count, created_at, updated_at
 		FROM articles
-		WHERE id = $1 AND (user_id = $2 OR source_type = 'builtin')
-	`, articleID, userID)
+		WHERE id = $1
+	`, articleID)
 
 	article, err := scanArticle(row)
 	if err != nil {

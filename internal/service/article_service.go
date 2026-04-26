@@ -43,6 +43,10 @@ func (s *ArticleService) ListByUser(ctx context.Context, userID int64) ([]model.
 	return s.articleRepo.ListByUser(ctx, userID)
 }
 
+func (s *ArticleService) ListPublic(ctx context.Context) ([]model.Article, error) {
+	return s.articleRepo.ListPublic(ctx)
+}
+
 func (s *ArticleService) Create(ctx context.Context, userID int64, title, content string, level model.JLPTLevel) (*model.Article, error) {
 	title = strings.TrimSpace(title)
 	content = strings.TrimSpace(content)
