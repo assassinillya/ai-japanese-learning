@@ -12,6 +12,7 @@
 - 文章句子拆分入库
 - 内置文章库种子数据
 - 文章阅读接口 `/api/reading/articles/{id}`
+- 词典纯查库接口 `/api/dictionary/search`
 - 词典查询接口 `/api/dictionary/lookup`
 - 占位词条生成与词典入库
 - 加入生词本与已加入状态查询
@@ -58,6 +59,7 @@
 - Dockerfile、docker-compose 和 `.env.example` 基础部署配置
 - MVP 测试数据 `seeds/002_mvp_seed_v09.sql`
 - 静态前端页面：登录、注册、首页、个人中心、文章上传、文章详情、阅读模式、查词弹窗
+- 静态前端 UI 重构：统一左侧导航、页面 Header、卡片、按钮、Badge、Toast、阅读页、查词弹窗、生词本、复习页和统计概览视觉系统
 
 ## 版本记录
 
@@ -119,6 +121,21 @@
   - 新增各类 AI Prompt 模板，统一要求 JSON 输出。
   - 词典生成、文章翻译、词汇复习题支持配置真实 AI 后优先调用；未配置或失败时继续使用占位逻辑。
   - 生词本能力保持完整：添加、列表、详情、状态筛选、状态修改、删除、上下文保存和复习联动。
+- `v1.2-frontend-refactor`
+  - 将静态前端重构为现代化单页学习工作台视觉：左侧固定导航、轻量顶部状态区、统一卡片与按钮设计系统。
+  - 登录、注册、首页、文章列表、上传、文章详情、阅读模式、挑战阅读、阅读后测验、生词本、词汇复习、学习记录、统计概览和个人中心完成统一样式更新。
+  - 阅读页强化日语正文排版、悬浮工具条、学习工具侧栏和小型词典卡查词体验。
+  - 词汇复习页改为居中大卡片、顶部悬浮工具条和卡片式选项反馈。
+  - 登录后隐藏登录/注册入口；阅读页改为展示完整正文，生词上下文在加入时按自然句边界截取。
+  - 后端文章分句增强为尊重日文括号和引号，避免把「勇輝君、持ってきたぞ。」这类引语拆断。
+  - 挑战阅读和阅读后测验切换为真实 AI 题目生成路径，未配置 AI 时返回明确提示，不再生成占位乱码选项。
+  - 个人中心新增 AI 接入参数记录与服务器环境变量配置提示。
+  - 保持原有后端 API 和静态前端单文件运行方式不变。
+- `v1.2-dictionary-ai-flow`
+  - 新增 `GET /api/dictionary/search?text=xxx` 纯查库接口，命中时只返回已有词条，不触发生成。
+  - 阅读、挑战阅读和阅读后测验的鼠标划词弹窗改为先查本地词典，未命中再调用 `POST /api/dictionary/generate`。
+  - AI 生成成功后词条会入库并立即显示原形、读音、罗马音、词性、JLPT、中文释义和保存例句，再可加入生词本。
+  - 保留旧 `/api/dictionary/lookup` 的查不到即生成行为，兼容已有调用。
 
 后续每次功能或结构改动，都需要同步更新 `README.md` 的版本记录和当前说明。
 
@@ -408,3 +425,26 @@ docker compose up --build
 - 未配置 `AI_API_KEY` 时，词典生成、文章翻译、词汇复习仍可走占位 fallback。
 - `GET /api/health` 返回 `version = v1.2`。
 - `AI_PROVIDER=openai-compatible` 时会通过 OpenAI-compatible Chat Completions 接口请求 JSON 输出。
+
+## v1.2 前端重构验证记录
+
+本轮按 `前端重构.md` 对 `internal/web/assets` 静态前端做视觉和布局重构，保留原有 API 请求逻辑。
+
+已验证：
+
+- `node --check internal/web/assets/app.js` 通过。
+- `GOCACHE=D:\project\ai-japanese-learning\.gocache go test ./...` 通过。
+- 登录、注册、首页、文章列表、上传、文章详情、阅读模式、查词弹窗、生词本、词汇复习、学习记录、统计概览和个人中心仍使用原有 DOM id 与 API 入口。
+- 阅读查词恢复为完整正文选词，保存生词时以前后句号和引号边界截取上下文。
+- 挑战阅读与阅读后测验现在依赖已配置 AI Provider；旧占位题缓存会在下次生成时替换。
+
+## v1.2 划词 AI 查词链路验证记录
+
+本轮在前端新页面上适配查词弹窗流程：鼠标划词后先请求本地词典，未命中再调用 AI 词条生成接口，生成结果入库后直接显示并可加入生词本。
+
+已验证：
+
+- `node --check internal/web/assets/app.js` 通过。
+- `GOCACHE=D:\project\ai-japanese-learning\.gocache go test ./...` 通过。
+- `go build -o .\tmp\ai-japanese-learning.exe .\cmd\server` 通过。
+- 本地烟测 `GET /api/dictionary/search` 首次返回 `found=false`，随后 `POST /api/dictionary/generate` 返回 `generated=true`，再次 `GET /api/dictionary/search` 返回 `found=true` 且 entry id 一致。

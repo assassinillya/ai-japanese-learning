@@ -3,179 +3,259 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ai-japanese-learning v1.2</title>
+    <title>日读 AI v1.2</title>
     <link rel="stylesheet" href="/assets/styles.css" />
   </head>
   <body>
-    <div class="shell">
+    <div class="app-shell shell">
       <aside class="sidebar">
-        <h1>AI 日语学习</h1>
-        <p class="muted">ai-japanese-learning · v1.2</p>
-        <nav>
-          <button data-view="login">登录</button>
-          <button data-view="register">注册</button>
-          <button data-view="onboarding">新手引导</button>
-          <button data-view="home">首页</button>
-          <button data-view="articles">我的文章</button>
-          <button data-view="upload">上传文章</button>
-          <button data-view="detail">文章详情</button>
-          <button data-view="reading">阅读模式</button>
-          <button data-view="challenge">挑战阅读</button>
-          <button data-view="post-quiz">阅读后测验</button>
-          <button data-view="vocabulary">生词本</button>
-          <button data-view="review">词汇复习</button>
-          <button data-view="records">学习记录</button>
-          <button data-view="stats">统计概览</button>
-          <button data-view="profile">个人中心</button>
-        </nav>
-      </aside>
-      <main class="content">
-        <section class="panel" id="status-panel">
+        <div class="sidebar-logo">
+          <div class="logo-mark">日</div>
           <div>
-            <h2>当前状态</h2>
-            <p id="auth-status">未登录</p>
+            <h1>日读 AI</h1>
+            <p>Nihongo Flow · v1.2</p>
           </div>
-          <div id="global-loading" class="loading-indicator hidden">处理中...</div>
-          <button id="logout-button" class="secondary">退出登录</button>
+        </div>
+        <nav class="sidebar-nav" aria-label="主导航">
+          <button class="nav-item" data-view="home"><span>⌂</span>首页</button>
+          <button class="nav-item" data-view="articles"><span>□</span>我的文章</button>
+          <button class="nav-item" data-view="upload"><span>＋</span>上传文章</button>
+          <button class="nav-item" data-view="reading"><span>文</span>阅读模式</button>
+          <button class="nav-item" data-view="vocabulary"><span>単</span>生词本</button>
+          <button class="nav-item" data-view="review"><span>✓</span>词汇复习</button>
+          <button class="nav-item" data-view="records"><span>◷</span>学习记录</button>
+          <button class="nav-item" data-view="stats"><span>▣</span>统计概览</button>
+          <button class="nav-item" data-view="profile"><span>人</span>个人中心</button>
+        </nav>
+        <div class="sidebar-footer">
+          <div id="auth-status">未登录</div>
+          <div class="sidebar-actions" id="auth-entry-actions">
+            <button class="btn btn-ghost compact" data-view="login">登录</button>
+            <button class="btn btn-ghost compact" data-view="register">注册</button>
+          </div>
+          <button id="logout-button" class="btn btn-secondary compact">退出登录</button>
+        </div>
+      </aside>
+
+      <main class="main content">
+        <section class="status-panel" id="status-panel">
+          <div>
+            <div class="eyebrow">AI Japanese Learning</div>
+            <p class="page-subtitle">阅读、查词、生词复习和学习统计集中在一个工作台。</p>
+          </div>
+          <div id="global-loading" class="loading-indicator hidden"><span class="loading-spinner"></span>处理中</div>
         </section>
 
-        <section class="panel view active" id="view-login">
-          <h2>登录</h2>
-          <form id="login-form">
-            <label>邮箱 <input name="email" type="email" required /></label>
-            <label>密码 <input name="password" type="password" required /></label>
-            <button type="submit">登录</button>
-          </form>
-        </section>
-
-        <section class="panel view" id="view-register">
-          <h2>注册</h2>
-          <form id="register-form">
-            <label>用户名 <input name="username" type="text" required /></label>
-            <label>邮箱 <input name="email" type="email" required /></label>
-            <label>密码 <input name="password" type="password" minlength="6" required /></label>
-            <label>
-              JLPT 等级
-              <select name="jlpt_level">
-                <option value="N5">N5</option>
-                <option value="N4">N4</option>
-                <option value="N3">N3</option>
-                <option value="N2">N2</option>
-                <option value="N1">N1</option>
-              </select>
-            </label>
-            <button type="submit">注册并进入</button>
-          </form>
-        </section>
-
-        <section class="panel view" id="view-home">
-          <h2>首页</h2>
-          <div class="cards">
-            <div class="card">
-              <h3>学习概览</h3>
-              <p id="home-greeting">请先登录。</p>
+        <section class="auth-view view active" id="view-login">
+          <div class="auth-brand">
+            <div class="logo-mark large">日</div>
+            <h2>欢迎回来</h2>
+            <p>继续你的日语阅读与生词复习，把真实文章变成可复习的词汇记忆。</p>
+            <div class="auth-points">
+              <span>文章阅读</span><span>AI 查词</span><span>生词复习</span>
             </div>
-            <div class="card">
+          </div>
+          <div class="auth-card card">
+            <h2 class="page-title">欢迎回来</h2>
+            <p class="page-subtitle">继续你的日语阅读与生词复习</p>
+            <form id="login-form">
+              <label>邮箱 <input class="input" name="email" type="email" required /></label>
+              <label>密码 <input class="input" name="password" type="password" required /></label>
+              <button class="btn btn-primary" type="submit">登录</button>
+            </form>
+          </div>
+        </section>
+
+        <section class="auth-view view" id="view-register">
+          <div class="auth-brand">
+            <div class="logo-mark large">日</div>
+            <h2>开始你的日语阅读之旅</h2>
+            <p>用感兴趣的文章积累真正记得住的单词。</p>
+            <div class="auth-points">
+              <span>JLPT 分级</span><span>上下文例句</span><span>复习曲线</span>
+            </div>
+          </div>
+          <div class="auth-card card">
+            <h2 class="page-title">创建账号</h2>
+            <p class="page-subtitle">选择你的起点，马上进入日语阅读流。</p>
+            <form id="register-form">
+              <label>用户名 <input class="input" name="username" type="text" required /></label>
+              <label>邮箱 <input class="input" name="email" type="email" required /></label>
+              <label>密码 <input class="input" name="password" type="password" minlength="6" required /></label>
+              <label>
+                JLPT 等级
+                <select class="input" name="jlpt_level">
+                  <option value="N5">N5 入门</option>
+                  <option value="N4">N4 基础</option>
+                  <option value="N3">N3 进阶</option>
+                  <option value="N2">N2 中高级</option>
+                  <option value="N1">N1 高级</option>
+                </select>
+              </label>
+              <button class="btn btn-primary" type="submit">注册并进入</button>
+            </form>
+          </div>
+        </section>
+
+        <section class="view" id="view-home">
+          <header class="page-header">
+            <div>
+              <h2 class="page-title">学习控制台</h2>
+              <p class="page-subtitle">こんにちは，今天也来读一点日语吧。</p>
+            </div>
+            <span class="badge badge-jlpt" data-user-jlpt>N5</span>
+          </header>
+          <div class="hero-card">
+            <div>
+              <div class="eyebrow">Today's Flow</div>
+              <h3 id="home-greeting">请先登录。</h3>
+              <p>选择文章、框选查词、加入生词本，再用选择题完成复习。</p>
+            </div>
+            <div class="detail-actions">
+              <button class="btn btn-primary" data-view="articles">开始阅读</button>
+              <button class="btn btn-secondary" data-view="upload">上传文章</button>
+              <button class="btn btn-ghost" data-view="review">今日复习</button>
+            </div>
+          </div>
+          <div class="dashboard-grid">
+            <section class="card">
               <h3>内置文章库</h3>
-              <p class="muted">点击文章标题可直接进入详情和阅读准备页面。</p>
-              <ul id="library-list" class="list"></ul>
+              <p class="muted">点击文章可进入详情和阅读准备页。</p>
+              <ul id="library-list" class="list article-grid"></ul>
+            </section>
+            <section class="card">
+              <h3>今日学习路径</h3>
+              <div class="step-list">
+                <span>1. 选择文章</span><span>2. 阅读并查词</span><span>3. 加入生词本</span><span>4. 完成复习</span>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="view-onboarding">
+          <div class="onboarding-card card">
+            <div class="eyebrow">1 / 2</div>
+            <h2 class="page-title">选择你的 JLPT 等级</h2>
+            <p class="page-subtitle">我们会根据你的等级调整文章和词汇提示。</p>
+            <div class="level-grid">
+              <button class="level-card">N5<span>入门</span></button>
+              <button class="level-card">N4<span>基础</span></button>
+              <button class="level-card active">N3<span>进阶</span></button>
+              <button class="level-card">N2<span>中高级</span></button>
+              <button class="level-card">N1<span>高级</span></button>
+            </div>
+            <div class="detail-actions">
+              <button id="complete-onboarding-button" class="btn btn-primary">开始学习</button>
+              <button class="btn btn-secondary" data-view="upload">去上传文章</button>
+              <button class="btn btn-ghost" data-view="home">看内置文章</button>
             </div>
           </div>
         </section>
 
-        <section class="panel view" id="view-onboarding">
-          <h2>新手引导</h2>
-          <div class="summary">
-            1. 选择或确认 JLPT 等级。
-            2. 从内置文章库选择文章，或上传自己的文章。
-            3. 进入阅读模式，框选日语词语查看释义。
-            4. 将生词加入生词本。
-            5. 进入词汇复习，完成选择题并更新记忆曲线。
+        <section class="view" id="view-articles">
+          <header class="page-header">
+            <div><h2 class="page-title">我的文章</h2><p class="page-subtitle">管理上传内容和阅读入口。</p></div>
+            <button class="btn btn-primary" data-view="upload">上传文章</button>
+          </header>
+          <ul id="article-list" class="list article-grid"></ul>
+        </section>
+
+        <section class="view" id="view-upload">
+          <header class="page-header">
+            <div><h2 class="page-title">上传文章</h2><p class="page-subtitle">粘贴日语、中文或英文内容，系统会生成日语学习材料。</p></div>
+          </header>
+          <div class="card upload-card">
+            <form id="article-form" class="wide-form">
+              <label>标题 <input class="input" name="title" type="text" required /></label>
+              <label>
+                文章内容
+                <textarea class="textarea" name="content" rows="12" required placeholder="粘贴中文、英文或日文文章"></textarea>
+              </label>
+              <div class="drop-zone">也可以把文本文件内容复制到这里。当前单篇上限约 12000 字符。</div>
+              <div class="detail-actions">
+                <button class="btn btn-primary" type="submit">保存文章</button>
+                <button class="btn btn-secondary" type="button" data-view="articles">返回我的文章</button>
+              </div>
+            </form>
           </div>
-          <div class="detail-actions">
-            <button id="complete-onboarding-button">完成引导</button>
-            <button class="secondary" data-view="upload">去上传文章</button>
-            <button class="secondary" data-view="home">看内置文章</button>
+        </section>
+
+        <section class="view" id="view-detail">
+          <header class="page-header">
+            <div><h2 class="page-title">文章详情</h2><p class="page-subtitle">查看处理状态、句子拆分和学习入口。</p></div>
+          </header>
+          <div id="article-detail" class="summary card">请选择一篇文章。</div>
+          <div class="detail-actions toolbar">
+            <button id="open-reading-button" class="btn btn-primary">进入阅读</button>
+            <button id="open-challenge-button" class="btn btn-secondary">挑战阅读</button>
+            <button id="open-post-quiz-button" class="btn btn-secondary">阅读后测验</button>
+            <button id="reprocess-button" class="btn btn-ghost">重新处理文章</button>
+          </div>
+          <ol id="sentence-list" class="list sentence-list hidden"></ol>
+        </section>
+
+        <section class="view reading-page" id="view-reading">
+          <header class="reading-toolbar">
+            <button class="btn btn-ghost" data-view="detail">返回文章</button>
+            <div id="reading-header" class="reading-title">请选择一篇文章进入阅读。</div>
+            <div class="detail-actions">
+              <button class="btn btn-secondary" id="open-challenge-button-toolbar" data-view="challenge">挑战阅读</button>
+              <button class="btn btn-secondary" id="open-post-quiz-button-toolbar" data-view="post-quiz">测验</button>
+              <button class="btn btn-ghost" data-view="vocabulary">生词本</button>
+            </div>
+          </header>
+          <div class="reading-layout">
+            <article id="reading-content" class="reading-container reading-content"></article>
+            <aside class="study-panel">
+              <strong>学习工具</strong>
+              <span>框选日语词语查词</span>
+              <span>加入生词本会保存上下文</span>
+              <button class="btn btn-primary compact" data-view="review">去复习</button>
+            </aside>
           </div>
         </section>
 
-        <section class="panel view" id="view-articles">
-          <h2>我的文章</h2>
-          <ul id="article-list" class="list article-list"></ul>
-        </section>
-
-        <section class="panel view" id="view-upload">
-          <h2>上传文章</h2>
-          <p class="muted">支持中文、英文、日文等文本。当前单篇上限约 12000 字符。</p>
-          <form id="article-form" class="wide-form">
-            <label>标题 <input name="title" type="text" required /></label>
-            <label>
-              文章内容
-              <textarea name="content" rows="10" required placeholder="粘贴中文、英文或日文文章"></textarea>
-            </label>
-            <button type="submit">上传并处理</button>
-          </form>
-        </section>
-
-        <section class="panel view" id="view-detail">
-          <h2>文章详情</h2>
-          <div id="article-detail" class="summary">请选择一篇文章。</div>
-          <div class="detail-actions">
-            <button id="open-reading-button" class="secondary">进入阅读</button>
-            <button id="open-challenge-button" class="secondary">进入挑战阅读</button>
-            <button id="open-post-quiz-button" class="secondary">阅读后测验</button>
-            <button id="reprocess-button">重新处理文章</button>
-          </div>
-          <h3>句子拆分</h3>
-          <ol id="sentence-list" class="list sentence-list"></ol>
-        </section>
-
-        <section class="panel view" id="view-reading">
-          <h2>文章阅读</h2>
-          <p class="muted">选中文本并停留约 0.5 秒后，会弹出释义窗口。</p>
-          <div id="reading-header" class="summary">请选择一篇文章进入阅读。</div>
-          <div id="reading-content" class="reading-content"></div>
-        </section>
-
-        <section class="panel view" id="view-challenge">
-          <h2>挑战阅读</h2>
-          <div id="challenge-header" class="summary">请选择一篇文章开始挑战阅读。</div>
-          <div id="challenge-card" class="challenge-card hidden">
-            <div id="challenge-progress" class="muted">第 0 / 0 题</div>
+        <section class="view" id="view-challenge">
+          <header class="page-header"><div><h2 class="page-title">挑战阅读</h2><p id="challenge-header" class="page-subtitle">请选择一篇文章开始挑战阅读。</p></div></header>
+          <div id="challenge-card" class="challenge-card card hidden">
+            <div id="challenge-progress" class="progress-label">第 0 / 0 题</div>
+            <div class="progress-bar"><span></span></div>
             <p id="challenge-sentence" class="reading-sentence challenge-sentence">题目加载中。</p>
             <div id="challenge-options" class="challenge-options"></div>
             <div id="challenge-feedback" class="summary hidden"></div>
             <div class="detail-actions">
-              <button id="submit-challenge-answer-button">提交答案</button>
-              <button id="next-challenge-question-button" class="secondary">下一题</button>
+              <button id="submit-challenge-answer-button" class="btn btn-primary">提交答案</button>
+              <button id="next-challenge-question-button" class="btn btn-secondary">下一题</button>
             </div>
           </div>
         </section>
 
-        <section class="panel view" id="view-post-quiz">
-          <h2>阅读后测验</h2>
-          <div id="post-quiz-header" class="summary">请选择一篇文章开始测验。</div>
-          <div id="post-quiz-card" class="challenge-card hidden">
-            <div id="post-quiz-progress" class="muted">第 0 / 0 题</div>
+        <section class="view" id="view-post-quiz">
+          <header class="page-header"><div><h2 class="page-title">阅读后测验</h2><p id="post-quiz-header" class="page-subtitle">请选择一篇文章开始测验。</p></div></header>
+          <div id="post-quiz-card" class="challenge-card card hidden">
+            <div id="post-quiz-progress" class="progress-label">第 0 / 0 题</div>
+            <div class="progress-bar"><span></span></div>
             <p id="post-quiz-question" class="reading-sentence challenge-sentence">题目加载中。</p>
             <p id="post-quiz-source" class="muted"></p>
             <div id="post-quiz-options" class="challenge-options"></div>
             <div id="post-quiz-feedback" class="summary hidden"></div>
             <div class="detail-actions">
-              <button id="submit-post-quiz-answer-button">提交答案</button>
-              <button id="next-post-quiz-question-button" class="secondary">下一题</button>
+              <button id="submit-post-quiz-answer-button" class="btn btn-primary">提交答案</button>
+              <button id="next-post-quiz-question-button" class="btn btn-secondary">下一题</button>
             </div>
           </div>
         </section>
 
-        <section class="panel view" id="view-vocabulary">
-          <h2>生词本</h2>
+        <section class="view" id="view-vocabulary">
+          <header class="page-header">
+            <div><h2 class="page-title">生词本</h2><p class="page-subtitle">按状态筛选、查看上下文并管理复习进度。</p></div>
+          </header>
           <div class="vocabulary-layout">
-            <div class="vocabulary-column">
+            <div class="card">
               <form id="vocabulary-filter-form" class="inline-form">
                 <label>
                   状态筛选
-                  <select name="status">
+                  <select class="input" name="status">
                     <option value="">全部</option>
                     <option value="new">new</option>
                     <option value="learning">learning</option>
@@ -184,93 +264,106 @@
                     <option value="ignored">ignored</option>
                   </select>
                 </label>
-                <button type="submit">筛选</button>
+                <button class="btn btn-secondary" type="submit">筛选</button>
               </form>
               <ul id="vocabulary-list" class="list vocabulary-list"></ul>
             </div>
-            <div class="vocabulary-column">
+            <div class="card">
               <div id="vocabulary-detail" class="summary">请选择一个生词查看详情。</div>
               <div class="detail-actions">
-                <button class="secondary" data-vocabulary-status="new">标记新词</button>
-                <button class="secondary" data-vocabulary-status="learning">标记学习中</button>
-                <button class="secondary" data-vocabulary-status="reviewing">标记复习中</button>
-                <button class="secondary" data-vocabulary-status="mastered">标记已掌握</button>
-                <button class="secondary" data-vocabulary-status="ignored">忽略</button>
-                <button id="open-vocabulary-article-button" class="secondary">打开来源文章</button>
-                <button id="delete-vocabulary-button">删除</button>
+                <button class="btn btn-secondary" data-vocabulary-status="new">新词</button>
+                <button class="btn btn-secondary" data-vocabulary-status="learning">学习中</button>
+                <button class="btn btn-secondary" data-vocabulary-status="reviewing">复习中</button>
+                <button class="btn btn-secondary" data-vocabulary-status="mastered">已掌握</button>
+                <button class="btn btn-ghost" data-vocabulary-status="ignored">忽略</button>
+                <button id="open-vocabulary-article-button" class="btn btn-ghost">打开来源</button>
+                <button id="delete-vocabulary-button" class="btn btn-danger">删除</button>
               </div>
             </div>
           </div>
         </section>
 
-        <section class="panel view" id="view-review">
-          <h2>词汇复习</h2>
-          <div id="review-header" class="summary">加载今日待复习生词。</div>
-          <div id="review-card" class="challenge-card hidden">
-            <div id="review-progress" class="muted">第 0 / 0 题</div>
-            <p id="review-question" class="reading-sentence challenge-sentence">题目加载中。</p>
+        <section class="view review-page" id="view-review">
+          <div class="review-toolbar">
+            <span id="review-header">加载今日待复习生词。</span>
+            <span class="badge badge-jlpt" data-user-jlpt>N5</span>
+            <button class="btn btn-ghost compact" data-view="vocabulary">生词本</button>
+          </div>
+          <div id="review-card" class="review-card hidden">
+            <div id="review-progress" class="progress-label">第 0 / 0 题</div>
+            <p id="review-question" class="review-word">题目加载中。</p>
             <p id="review-context" class="muted"></p>
             <div id="review-options" class="challenge-options"></div>
             <div id="review-feedback" class="summary hidden"></div>
-            <div class="detail-actions">
-              <button id="submit-review-answer-button">提交答案</button>
-              <button id="next-review-question-button" class="secondary">下一题</button>
+            <div class="detail-actions center">
+              <button id="submit-review-answer-button" class="btn btn-primary">提交答案</button>
+              <button id="next-review-question-button" class="btn btn-secondary">下一词</button>
             </div>
           </div>
         </section>
 
-        <section class="panel view" id="view-records">
-          <h2>学习记录</h2>
-          <div class="detail-actions">
-            <button id="load-post-quiz-results-button" class="secondary">查看当前文章测验记录</button>
-            <button id="load-review-records-button" class="secondary">查看词汇复习记录</button>
+        <section class="view" id="view-records">
+          <header class="page-header"><div><h2 class="page-title">学习记录</h2><p class="page-subtitle">查看最近测验和复习结果。</p></div></header>
+          <div class="detail-actions toolbar">
+            <button id="load-post-quiz-results-button" class="btn btn-secondary">当前文章测验记录</button>
+            <button id="load-review-records-button" class="btn btn-secondary">词汇复习记录</button>
           </div>
           <div class="vocabulary-layout">
-            <div class="vocabulary-column">
-              <h3>阅读后测验记录</h3>
-              <ul id="post-quiz-results-list" class="list"></ul>
-            </div>
-            <div class="vocabulary-column">
-              <h3>词汇复习记录</h3>
-              <ul id="review-records-list" class="list"></ul>
-            </div>
+            <div class="card"><h3>阅读后测验记录</h3><ul id="post-quiz-results-list" class="list"></ul></div>
+            <div class="card"><h3>词汇复习记录</h3><ul id="review-records-list" class="list"></ul></div>
           </div>
         </section>
 
-        <section class="panel view" id="view-stats">
-          <h2>统计概览</h2>
+        <section class="view" id="view-stats">
+          <header class="page-header"><div><h2 class="page-title">统计概览</h2><p class="page-subtitle">学习数据、正确率和生词状态分布。</p></div></header>
           <div id="learning-stats" class="summary">正在加载学习统计。</div>
         </section>
 
-        <section class="panel view" id="view-profile">
-          <h2>个人中心</h2>
-          <div id="profile-summary" class="summary">尚未加载资料。</div>
-          <form id="jlpt-form">
-            <label>
-              修改 JLPT 等级
-              <select name="jlpt_level">
-                <option value="N5">N5</option>
-                <option value="N4">N4</option>
-                <option value="N3">N3</option>
-                <option value="N2">N2</option>
-                <option value="N1">N1</option>
-              </select>
-            </label>
-            <button type="submit">保存等级</button>
-          </form>
+        <section class="view" id="view-profile">
+          <header class="page-header"><div><h2 class="page-title">个人中心</h2><p class="page-subtitle">账号信息、JLPT 等级和 AI 接入设置。</p></div></header>
+          <div class="vocabulary-layout">
+            <div id="profile-summary" class="summary card">尚未加载资料。</div>
+            <div class="card">
+              <form id="jlpt-form">
+                <label>
+                  修改 JLPT 等级
+                  <select class="input" name="jlpt_level">
+                    <option value="N5">N5</option>
+                    <option value="N4">N4</option>
+                    <option value="N3">N3</option>
+                    <option value="N2">N2</option>
+                    <option value="N1">N1</option>
+                  </select>
+                </label>
+                <button class="btn btn-primary" type="submit">保存等级</button>
+              </form>
+            </div>
+            <div class="card">
+              <h3>AI 接入</h3>
+              <p class="muted">挑战阅读和阅读后测验需要 OpenAI-compatible Chat Completions。当前后端从环境变量读取 AI 配置；这里用于记录接入参数和提示启动配置。</p>
+              <form id="ai-config-form">
+                <label>Provider <input class="input" name="provider" value="openai-compatible" /></label>
+                <label>Base URL <input class="input" name="base_url" placeholder="https://api.openai.com/v1" /></label>
+                <label>API Key <input class="input" name="api_key" type="password" placeholder="sk-..." /></label>
+                <label>Model <input class="input" name="model" placeholder="gpt-4o-mini" /></label>
+                <button class="btn btn-secondary" type="submit">保存接入参数</button>
+              </form>
+              <p class="meta">要让后端实际调用 AI，请用同样参数设置 AI_PROVIDER、AI_BASE_URL、AI_API_KEY、AI_MODEL 后重启服务。</p>
+            </div>
+          </div>
         </section>
 
-        <section class="panel" id="message-panel">
-          <h2>消息</h2>
+        <section class="toast" id="message-panel" aria-live="polite">
           <pre id="message-box">等待操作</pre>
         </section>
       </main>
     </div>
-    <aside id="lookup-popup" class="lookup-popup hidden">
+
+    <aside id="lookup-popup" class="lookup-popup dictionary-popover hidden">
       <div class="lookup-popup-card">
         <div id="lookup-popup-title" class="lookup-title">查词</div>
-        <pre id="lookup-popup-body" class="lookup-body">请选择文章中的文本。</pre>
-        <button id="add-vocabulary-button">加入生词本</button>
+        <div id="lookup-popup-body" class="lookup-body">请选择文章中的文本。</div>
+        <button id="add-vocabulary-button" class="btn btn-primary compact">加入生词本</button>
       </div>
     </aside>
     <script src="/assets/app.js"></script>

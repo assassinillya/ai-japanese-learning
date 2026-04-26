@@ -171,18 +171,69 @@ func splitSentences(content string) []string {
 
 	cleaned = strings.ReplaceAll(cleaned, "\r\n", "\n")
 	cleaned = strings.ReplaceAll(cleaned, "\n", " ")
-	cleaned = strings.NewReplacer("。", "。\n", "！", "！\n", "？", "？\n").Replace(cleaned)
-
-	parts := strings.Split(cleaned, "\n")
 	var sentences []string
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if part != "" {
-			sentences = append(sentences, part)
+	var current []rune
+	quoteDepth := 0
+	pendingQuotedEnd := false
+	for _, r := range cleaned {
+		current = append(current, r)
+		if isOpeningQuote(r) {
+			quoteDepth++
+			continue
+		}
+		if isSentenceTerminator(r) {
+			if quoteDepth > 0 {
+				pendingQuotedEnd = true
+				continue
+			}
+			sentences = appendTrimmedSentence(sentences, current)
+			current = current[:0]
+			continue
+		}
+		if isClosingQuote(r) {
+			if quoteDepth > 0 {
+				quoteDepth--
+			}
+			if pendingQuotedEnd && quoteDepth == 0 {
+				sentences = appendTrimmedSentence(sentences, current)
+				current = current[:0]
+				pendingQuotedEnd = false
+			}
 		}
 	}
+	sentences = appendTrimmedSentence(sentences, current)
 	if len(sentences) == 0 {
 		return []string{strings.TrimSpace(content)}
 	}
 	return sentences
+}
+
+func appendTrimmedSentence(sentences []string, runes []rune) []string {
+	sentence := strings.TrimSpace(string(runes))
+	if sentence == "" {
+		return sentences
+	}
+	return append(sentences, sentence)
+}
+
+func isSentenceTerminator(r rune) bool {
+	return r == '。' || r == '！' || r == '？' || r == '!' || r == '?'
+}
+
+func isOpeningQuote(r rune) bool {
+	switch r {
+	case '「', '『', '“', '‘', '（', '(', '《':
+		return true
+	default:
+		return false
+	}
+}
+
+func isClosingQuote(r rune) bool {
+	switch r {
+	case '」', '』', '”', '’', '）', ')', '》':
+		return true
+	default:
+		return false
+	}
 }

@@ -11,6 +11,20 @@ type dictionaryGenerateRequest struct {
 	Text string `json:"text"`
 }
 
+func (r *Router) handleDictionarySearch(w http.ResponseWriter, req *http.Request) {
+	text := req.URL.Query().Get("text")
+	entry, found, err := r.dictionaryService.Lookup(req.Context(), text)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"found": found,
+		"entry": entry,
+	})
+}
+
 func (r *Router) handleDictionaryLookup(w http.ResponseWriter, req *http.Request) {
 	text := req.URL.Query().Get("text")
 	entry, generated, err := r.dictionaryService.LookupOrGenerate(req.Context(), text)

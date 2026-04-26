@@ -79,6 +79,7 @@ func NewRouter(
 	r.mux.HandleFunc("GET /api/reading/articles/{id}/post-quiz", r.withAuth(r.handleListPostQuiz))
 	r.mux.HandleFunc("GET /api/reading/articles/{id}/post-quiz/results", r.withAuth(r.handlePostQuizResults))
 	r.mux.HandleFunc("POST /api/reading/questions/{id}/answer", r.withAuth(r.handleSubmitChallengeAnswer))
+	r.mux.HandleFunc("GET /api/dictionary/search", r.withAuth(r.handleDictionarySearch))
 	r.mux.HandleFunc("GET /api/dictionary/lookup", r.withAuth(r.handleDictionaryLookup))
 	r.mux.HandleFunc("POST /api/dictionary/generate", r.withAuth(r.handleDictionaryGenerate))
 	r.mux.HandleFunc("GET /api/dictionary/{id}", r.withAuth(r.handleDictionaryDetail))

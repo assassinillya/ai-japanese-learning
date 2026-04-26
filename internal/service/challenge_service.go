@@ -53,7 +53,9 @@ func (s *ChallengeService) GetOrGenerate(ctx context.Context, userID, articleID 
 		return nil, err
 	}
 	if len(existing) > 0 {
-		return existing, nil
+		if !containsPlaceholderQuestions(existing) {
+			return existing, nil
+		}
 	}
 
 	return s.Generate(ctx, userID, articleID)
@@ -76,6 +78,11 @@ func (s *ChallengeService) Generate(ctx context.Context, userID, articleID int64
 	aiModel := "placeholder-challenge-generator"
 	promptVersion := "v0.8-review"
 	request := challengeCacheRequest(article, sentences, QuestionTypeChallengeReading)
+	if s.aiService == nil || !s.aiService.ProviderAvailable() {
+		return nil, fmt.Errorf("挑战阅读题需要先配置可用 AI Provider，请在个人中心查看 AI 接入说明")
+	}
+	aiModel = s.aiService.ModelName("ai-challenge-generator")
+	promptVersion = aiPromptVersionV12
 	cacheKey, inputHash := s.challengeCacheKey(request, aiModel, promptVersion)
 	if cached, ok := s.getCachedChallengeQuestions(ctx, cacheKey); ok {
 		if err := s.challengeRepo.ReplaceByArticleAndType(ctx, articleID, QuestionTypeChallengeReading, cached); err != nil {
@@ -83,54 +90,10 @@ func (s *ChallengeService) Generate(ctx context.Context, userID, articleID int64
 		}
 		return s.challengeRepo.ListByArticleAndType(ctx, articleID, QuestionTypeChallengeReading)
 	}
-
-	dictionaryEntries, err := s.dictionaryRepo.ListAll(ctx)
+	questions, err := s.generateQuestionsWithAI(ctx, articleID, request, QuestionTypeChallengeReading, aiModel, promptVersion)
 	if err != nil {
+		s.aiService.LogFailure(ctx, QuestionTypeChallengeReading, request, err, aiModel, promptVersion)
 		return nil, err
-	}
-
-	var questions []model.ChallengeQuestion
-	for _, sentence := range sentences {
-		keyword, entry, err := s.pickKeyword(ctx, sentence.SentenceText, dictionaryEntries)
-		if err != nil || keyword == "" || entry == nil {
-			continue
-		}
-		masked := strings.Replace(sentence.SentenceText, keyword, "____", 1)
-		if masked == sentence.SentenceText {
-			continue
-		}
-
-		options, correctOption, explanation, err := s.buildOptions(ctx, entry)
-		if err != nil {
-			return nil, err
-		}
-		questions = append(questions, model.ChallengeQuestion{
-			ArticleID:         articleID,
-			SentenceID:        sentence.ID,
-			QuestionType:      QuestionTypeChallengeReading,
-			QuestionOrder:     len(questions) + 1,
-			SentenceText:      sentence.SentenceText,
-			MaskedSentence:    masked,
-			CorrectEntryID:    entry.ID,
-			CorrectAnswerText: keyword,
-			OptionA:           options[0],
-			OptionB:           options[1],
-			OptionC:           options[2],
-			OptionD:           options[3],
-			CorrectOption:     correctOption,
-			Explanation:       explanation,
-			JLPTLevel:         string(article.JLPTLevel),
-			AIModel:           &aiModel,
-			PromptVersion:     &promptVersion,
-		})
-
-		if len(questions) >= 5 {
-			break
-		}
-	}
-
-	if len(questions) == 0 {
-		return nil, fmt.Errorf("no suitable challenge questions could be generated")
 	}
 	s.storeCachedChallengeQuestions(ctx, QuestionTypeChallengeReading, inputHash, cacheKey, request, questions, aiModel, promptVersion)
 	if err := s.challengeRepo.ReplaceByArticleAndType(ctx, articleID, QuestionTypeChallengeReading, questions); err != nil {
@@ -149,7 +112,9 @@ func (s *ChallengeService) GetOrGeneratePostQuiz(ctx context.Context, userID, ar
 		return nil, err
 	}
 	if len(existing) > 0 {
-		return existing, nil
+		if !containsPlaceholderQuestions(existing) {
+			return existing, nil
+		}
 	}
 
 	return s.GeneratePostQuiz(ctx, userID, articleID)
@@ -172,6 +137,11 @@ func (s *ChallengeService) GeneratePostQuiz(ctx context.Context, userID, article
 	aiModel := "placeholder-post-quiz-generator"
 	promptVersion := "v0.8-review"
 	request := challengeCacheRequest(article, sentences, QuestionTypePostReadingQuiz)
+	if s.aiService == nil || !s.aiService.ProviderAvailable() {
+		return nil, fmt.Errorf("阅读后测验需要先配置可用 AI Provider，请在个人中心查看 AI 接入说明")
+	}
+	aiModel = s.aiService.ModelName("ai-post-quiz-generator")
+	promptVersion = aiPromptVersionV12
 	cacheKey, inputHash := s.challengeCacheKey(request, aiModel, promptVersion)
 	if cached, ok := s.getCachedChallengeQuestions(ctx, cacheKey); ok {
 		if err := s.challengeRepo.ReplaceByArticleAndType(ctx, articleID, QuestionTypePostReadingQuiz, cached); err != nil {
@@ -179,52 +149,10 @@ func (s *ChallengeService) GeneratePostQuiz(ctx context.Context, userID, article
 		}
 		return s.challengeRepo.ListByArticleAndType(ctx, articleID, QuestionTypePostReadingQuiz)
 	}
-
-	dictionaryEntries, err := s.dictionaryRepo.ListAll(ctx)
+	questions, err := s.generateQuestionsWithAI(ctx, articleID, request, QuestionTypePostReadingQuiz, aiModel, promptVersion)
 	if err != nil {
+		s.aiService.LogFailure(ctx, QuestionTypePostReadingQuiz, request, err, aiModel, promptVersion)
 		return nil, err
-	}
-
-	var questions []model.ChallengeQuestion
-	for _, sentence := range sentences {
-		keyword, entry, err := s.pickKeyword(ctx, sentence.SentenceText, dictionaryEntries)
-		if err != nil || keyword == "" || entry == nil {
-			continue
-		}
-
-		options, correctOption, explanation, err := s.buildMeaningOptions(ctx, entry)
-		if err != nil {
-			return nil, err
-		}
-		prompt := fmt.Sprintf("读完文章后，请选择文中「%s」最合适的中文意思。", keyword)
-
-		questions = append(questions, model.ChallengeQuestion{
-			ArticleID:         articleID,
-			SentenceID:        sentence.ID,
-			QuestionType:      QuestionTypePostReadingQuiz,
-			QuestionOrder:     len(questions) + 1,
-			SentenceText:      sentence.SentenceText,
-			MaskedSentence:    prompt,
-			CorrectEntryID:    entry.ID,
-			CorrectAnswerText: entry.PrimaryMeaningZH,
-			OptionA:           options[0],
-			OptionB:           options[1],
-			OptionC:           options[2],
-			OptionD:           options[3],
-			CorrectOption:     correctOption,
-			Explanation:       explanation,
-			JLPTLevel:         string(article.JLPTLevel),
-			AIModel:           &aiModel,
-			PromptVersion:     &promptVersion,
-		})
-
-		if len(questions) >= 5 {
-			break
-		}
-	}
-
-	if len(questions) == 0 {
-		return nil, fmt.Errorf("no suitable post-reading quiz questions could be generated")
 	}
 	s.storeCachedChallengeQuestions(ctx, QuestionTypePostReadingQuiz, inputHash, cacheKey, request, questions, aiModel, promptVersion)
 	if err := s.challengeRepo.ReplaceByArticleAndType(ctx, articleID, QuestionTypePostReadingQuiz, questions); err != nil {
@@ -268,6 +196,138 @@ func (s *ChallengeService) SubmitAnswer(ctx context.Context, userID, questionID 
 		"correct_answer_text": question.CorrectAnswerText,
 		"explanation":         question.Explanation,
 	}, nil
+}
+
+type aiQuestionResponse struct {
+	Items []aiQuestionItem `json:"items"`
+}
+
+type aiQuestionItem struct {
+	SentenceID        int64  `json:"sentence_id"`
+	SentenceText      string `json:"sentence_text"`
+	MaskedSentence    string `json:"masked_sentence"`
+	CorrectAnswerText string `json:"correct_answer_text"`
+	OptionA           string `json:"option_a"`
+	OptionB           string `json:"option_b"`
+	OptionC           string `json:"option_c"`
+	OptionD           string `json:"option_d"`
+	CorrectOption     string `json:"correct_option"`
+	Explanation       string `json:"explanation"`
+}
+
+func (s *ChallengeService) generateQuestionsWithAI(
+	ctx context.Context,
+	articleID int64,
+	request challengeQuestionCacheRequest,
+	questionType string,
+	aiModel string,
+	promptVersion string,
+) ([]model.ChallengeQuestion, error) {
+	var prompt AIPrompt
+	if questionType == QuestionTypePostReadingQuiz {
+		prompt = promptPostQuizQuestions(request)
+	} else {
+		prompt = promptChallengeQuestions(request)
+	}
+	raw, err := s.aiService.CompleteJSON(ctx, prompt)
+	if err != nil {
+		return nil, fmt.Errorf("generate reading questions with ai: %w", err)
+	}
+	var parsed aiQuestionResponse
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		return nil, fmt.Errorf("parse ai reading questions: %w", err)
+	}
+	if len(parsed.Items) == 0 {
+		return nil, fmt.Errorf("ai did not return any reading questions")
+	}
+
+	sentenceByID := make(map[int64]challengeCacheSentence, len(request.Sentences))
+	for _, sentence := range request.Sentences {
+		sentenceByID[sentence.ID] = sentence
+	}
+	questions := make([]model.ChallengeQuestion, 0, min(len(parsed.Items), 8))
+	for _, item := range parsed.Items {
+		if len(questions) >= 8 {
+			break
+		}
+		item.CorrectOption = strings.ToUpper(strings.TrimSpace(item.CorrectOption))
+		options := []string{
+			strings.TrimSpace(item.OptionA),
+			strings.TrimSpace(item.OptionB),
+			strings.TrimSpace(item.OptionC),
+			strings.TrimSpace(item.OptionD),
+		}
+		if !slices.Contains([]string{"A", "B", "C", "D"}, item.CorrectOption) ||
+			strings.TrimSpace(item.MaskedSentence) == "" ||
+			strings.TrimSpace(item.CorrectAnswerText) == "" ||
+			hasBlankOption(options) {
+			continue
+		}
+		sentence, ok := sentenceByID[item.SentenceID]
+		if !ok && len(request.Sentences) > 0 {
+			sentence = request.Sentences[0]
+		}
+		sentenceText := strings.TrimSpace(item.SentenceText)
+		if sentenceText == "" {
+			sentenceText = sentence.SentenceText
+		}
+		entry, _, err := s.dictionarySvc.LookupOrGenerate(ctx, item.CorrectAnswerText)
+		if err != nil {
+			return nil, fmt.Errorf("ensure correct answer dictionary entry: %w", err)
+		}
+		questions = append(questions, model.ChallengeQuestion{
+			ArticleID:         articleID,
+			SentenceID:        sentence.ID,
+			QuestionType:      questionType,
+			QuestionOrder:     len(questions) + 1,
+			SentenceText:      sentenceText,
+			MaskedSentence:    strings.TrimSpace(item.MaskedSentence),
+			CorrectEntryID:    entry.ID,
+			CorrectAnswerText: strings.TrimSpace(item.CorrectAnswerText),
+			OptionA:           options[0],
+			OptionB:           options[1],
+			OptionC:           options[2],
+			OptionD:           options[3],
+			CorrectOption:     item.CorrectOption,
+			Explanation:       strings.TrimSpace(item.Explanation),
+			JLPTLevel:         string(request.JLPTLevel),
+			AIModel:           &aiModel,
+			PromptVersion:     &promptVersion,
+		})
+	}
+	if len(questions) == 0 {
+		return nil, fmt.Errorf("ai returned no valid reading questions")
+	}
+	return questions, nil
+}
+
+func hasBlankOption(options []string) bool {
+	seen := map[string]bool{}
+	for _, option := range options {
+		if strings.TrimSpace(option) == "" {
+			return true
+		}
+		if seen[option] {
+			return true
+		}
+		seen[option] = true
+	}
+	return false
+}
+
+func containsPlaceholderQuestions(questions []model.ChallengeQuestion) bool {
+	for _, question := range questions {
+		if question.AIModel != nil && strings.HasPrefix(*question.AIModel, "placeholder-") {
+			return true
+		}
+		if strings.Contains(question.OptionA, "候补") || strings.Contains(question.OptionB, "候补") ||
+			strings.Contains(question.OptionC, "候补") || strings.Contains(question.OptionD, "候补") ||
+			strings.Contains(question.OptionA, "干扰项") || strings.Contains(question.OptionB, "干扰项") ||
+			strings.Contains(question.OptionC, "干扰项") || strings.Contains(question.OptionD, "干扰项") {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *ChallengeService) pickKeyword(ctx context.Context, sentence string, entries []model.DictionaryEntry) (string, *model.DictionaryEntry, error) {

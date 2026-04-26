@@ -41,6 +41,7 @@ const views = document.querySelectorAll(".view");
 const messageBox = document.getElementById("message-box");
 const globalLoading = document.getElementById("global-loading");
 const authStatus = document.getElementById("auth-status");
+const authEntryActions = document.getElementById("auth-entry-actions");
 const homeGreeting = document.getElementById("home-greeting");
 const profileSummary = document.getElementById("profile-summary");
 const learningStats = document.getElementById("learning-stats");
@@ -96,6 +97,7 @@ const loadPostQuizResultsButton = document.getElementById("load-post-quiz-result
 const loadReviewRecordsButton = document.getElementById("load-review-records-button");
 const completeOnboardingButton = document.getElementById("complete-onboarding-button");
 const reprocessButton = document.getElementById("reprocess-button");
+const aiConfigForm = document.getElementById("ai-config-form");
 
 document.querySelectorAll("[data-view]").forEach((button) => {
   button.addEventListener("click", async () => {
@@ -116,6 +118,15 @@ document.querySelectorAll("[data-view]").forEach((button) => {
     }
     if (view === "records" && state.user) {
       await loadLearningRecords();
+    }
+    if (view === "reading" && state.user && state.selectedArticleId) {
+      await loadReadingArticle(state.selectedArticleId);
+    }
+    if (view === "challenge" && state.user && state.selectedArticleId) {
+      await loadChallengeQuestions(state.selectedArticleId);
+    }
+    if (view === "post-quiz" && state.user && state.selectedArticleId) {
+      await loadPostQuizQuestions(state.selectedArticleId);
     }
     showView(view);
   });
@@ -172,6 +183,28 @@ document.getElementById("logout-button").addEventListener("click", async () => {
   renderUser();
   setMessage("已退出登录");
 });
+
+if (aiConfigForm) {
+  const savedAIConfig = JSON.parse(localStorage.getItem("ai_config_hint") || "{}");
+  Object.entries(savedAIConfig).forEach(([key, value]) => {
+    if (aiConfigForm.elements[key] && key !== "api_key") {
+      aiConfigForm.elements[key].value = value;
+    }
+  });
+  aiConfigForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const payload = Object.fromEntries(new FormData(event.currentTarget).entries());
+    localStorage.setItem(
+      "ai_config_hint",
+      JSON.stringify({
+        provider: payload.provider,
+        base_url: payload.base_url,
+        model: payload.model,
+      }),
+    );
+    setMessage("AI 接入参数已记录。后端实际调用 AI 仍需设置环境变量并重启服务。");
+  });
+}
 
 document.getElementById("jlpt-form").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -306,6 +339,9 @@ vocabularyStatusButtons.forEach((button) => {
 deleteVocabularyButton.addEventListener("click", async () => {
   if (!state.selectedVocabularyId) {
     setMessage("请先选择一个生词");
+    return;
+  }
+  if (!window.confirm("确定要删除这个生词吗？")) {
     return;
   }
   const vocabularyId = state.selectedVocabularyId;
@@ -507,6 +543,10 @@ challengeSentence.addEventListener("mouseup", () => {
   scheduleLookupFromSelection();
 });
 
+postQuizQuestion.addEventListener("mouseup", () => {
+  scheduleLookupFromSelection();
+});
+
 document.addEventListener("mousedown", (event) => {
   if (!popupCard.contains(event.target)) {
     hideLookupPopup();
@@ -536,11 +576,16 @@ async function bootstrap() {
 
 function showView(name) {
   views.forEach((view) => view.classList.toggle("active", view.id === `view-${name}`));
+  document.querySelectorAll("[data-view]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.view === name && button.classList.contains("nav-item"));
+  });
 }
 
 function renderUser() {
   if (!state.user) {
     authStatus.textContent = "未登录";
+    authEntryActions?.classList.remove("hidden");
+    document.getElementById("logout-button").classList.add("hidden");
     homeGreeting.textContent = "登录后可查看文章库、上传文章并进入处理流程。";
     profileSummary.textContent = "尚未加载资料。";
     learningStats.textContent = "请先登录后查看学习统计。";
@@ -566,13 +611,20 @@ function renderUser() {
   }
 
   authStatus.textContent = `已登录：${state.user.username}（${state.user.email}）`;
+  authEntryActions?.classList.add("hidden");
+  document.getElementById("logout-button").classList.remove("hidden");
   homeGreeting.textContent = `欢迎回来，${state.user.username}。当前 JLPT：${state.user.jlpt_level}`;
-  profileSummary.textContent = [
-    `用户名：${state.user.username}`,
-    `邮箱：${state.user.email}`,
-    `JLPT：${state.user.jlpt_level}`,
-    `首次引导完成：${state.user.onboarding_completed ? "是" : "否"}`,
-  ].join("\n");
+  document.querySelectorAll("[data-user-jlpt]").forEach((node) => {
+    node.textContent = state.user.jlpt_level || "N5";
+  });
+  profileSummary.innerHTML = `
+    <div class="article-card">
+      <span class="article-card-title">${escapeHTML(state.user.username)}</span>
+      <span class="meta">${escapeHTML(state.user.email)}</span>
+      <span class="badge badge-jlpt">${escapeHTML(state.user.jlpt_level || "-")}</span>
+      <span class="meta">新手引导：${state.user.onboarding_completed ? "已完成" : "未完成"}</span>
+    </div>
+  `;
   document.querySelector('#jlpt-form select[name="jlpt_level"]').value = state.user.jlpt_level;
   vocabularyFilterForm.elements.status.value = state.vocabularyFilter;
   if (!state.selectedVocabularyId) {
@@ -610,20 +662,31 @@ async function loadLearningStats() {
 
   const stats = result.data;
   const statusCounts = stats.vocabulary_status_counts || {};
-  learningStats.textContent = [
-    `我的文章：${stats.article_count}`,
-    `生词总数：${stats.vocabulary_count}`,
-    `今日待复习：${stats.due_vocabulary_count}`,
-    `阅读答题：${stats.reading_attempt_count} 次（正确 ${stats.reading_correct_count} / 错误 ${stats.reading_wrong_count}）`,
-    `词汇复习：${stats.review_record_count} 次（正确 ${stats.review_correct_count} / 错误 ${stats.review_wrong_count}）`,
-    "",
-    "生词状态：",
-    `new：${statusCounts.new || 0}`,
-    `learning：${statusCounts.learning || 0}`,
-    `reviewing：${statusCounts.reviewing || 0}`,
-    `mastered：${statusCounts.mastered || 0}`,
-    `ignored：${statusCounts.ignored || 0}`,
-  ].join("\n");
+  const readingRate = percent(stats.reading_correct_count, stats.reading_attempt_count);
+  const reviewRate = percent(stats.review_correct_count, stats.review_record_count);
+  const totalStatus = Object.values(statusCounts).reduce((sum, value) => sum + Number(value || 0), 0) || 1;
+  learningStats.innerHTML = `
+    <div class="article-grid">
+      ${statCard("我的文章", stats.article_count)}
+      ${statCard("生词总数", stats.vocabulary_count)}
+      ${statCard("今日待复习", stats.due_vocabulary_count)}
+      ${statCard("阅读正确率", readingRate)}
+      ${statCard("复习正确率", reviewRate)}
+      ${statCard("复习次数", stats.review_record_count)}
+    </div>
+    <div class="card" style="margin-top:18px">
+      <h3>生词状态分布</h3>
+      ${["new", "learning", "reviewing", "mastered", "ignored"].map((key) => {
+        const count = statusCounts[key] || 0;
+        const width = Math.max(4, Math.round((count / totalStatus) * 100));
+        return `<div class="stat-row"><span class="tag status-${key}">${key}</span><div class="progress-bar"><span style="width:${width}%"></span></div><strong>${count}</strong></div>`;
+      }).join("")}
+    </div>
+    <div class="card" style="margin-top:18px">
+      <h3>学习建议</h3>
+      <p class="muted">${stats.due_vocabulary_count > 0 ? "今日有到期生词，建议先完成词汇复习。" : "今天的到期生词已清空，可以继续阅读添加新词。"}</p>
+    </div>
+  `;
 }
 
 async function loadPostQuizResults() {
@@ -707,10 +770,11 @@ async function loadLibrary() {
     .map(
       (article) => `
         <li>
-          <button class="link-button" data-article-id="${article.id}">
-            ${escapeHTML(article.title)}
+          <button class="article-card" data-article-id="${article.id}">
+            <span class="article-card-title">${escapeHTML(article.title)}</span>
+            <span><span class="badge badge-jlpt">${escapeHTML(article.jlpt_level || "-")}</span> <span class="tag">${escapeHTML(article.translation_status || "-")}</span></span>
+            <span class="meta">${article.sentence_count || 0} 句 · 内置文章</span>
           </button>
-          <span class="meta">${article.jlpt_level} / ${article.translation_status} / ${article.sentence_count} 句</span>
         </li>
       `,
     )
@@ -734,10 +798,12 @@ async function loadArticles() {
     .map(
       (article) => `
         <li>
-          <button class="link-button" data-article-id="${article.id}">
-            ${escapeHTML(article.title)}
+          <button class="article-card" data-article-id="${article.id}">
+            <span class="article-card-title">${escapeHTML(article.title)}</span>
+            <span><span class="tag">${escapeHTML(article.source_type || "mine")}</span> <span class="tag">${escapeHTML(article.translation_status || "-")}</span></span>
+            <span class="meta">${escapeHTML(article.original_language || "-")} · ${article.sentence_count || 0} 句 · ${formatDateTime(article.updated_at || article.created_at)}</span>
+            <span class="meta">点击查看详情、阅读或重新处理。</span>
           </button>
-          <span class="meta">${article.original_language} / ${article.translation_status} / ${article.sentence_count} 句</span>
         </li>
       `,
     )
@@ -757,27 +823,28 @@ async function loadArticleDetail(articleId) {
 
   const article = articleResult.data;
   state.selectedArticleId = article.id;
-  articleDetail.textContent = [
-    `标题：${article.title}`,
-    `原文语言：${article.original_language}`,
-    `JLPT：${article.jlpt_level}`,
-    `处理状态：${article.translation_status}`,
-    `来源类型：${article.source_type}`,
-    `句子数量：${article.sentence_count}`,
-    `处理说明：${article.processing_notes || "-"}`,
-    `原文预览：${article.original_content || "-"}`,
-    `中文翻译：${article.chinese_translation || "-"}`,
-    "",
-    "日语内容：",
-    article.japanese_content,
-  ].join("\n");
+  articleDetail.innerHTML = `
+    <div class="article-card">
+      <span class="article-card-title">${escapeHTML(article.title)}</span>
+      <span>
+        <span class="badge badge-jlpt">${escapeHTML(article.jlpt_level || "-")}</span>
+        <span class="tag">${escapeHTML(article.translation_status || "-")}</span>
+        <span class="tag">${escapeHTML(article.source_type || "-")}</span>
+      </span>
+      <span class="meta">原文语言：${escapeHTML(article.original_language || "-")} · 句子数量：${article.sentence_count || 0}</span>
+      <span class="meta">处理说明：${escapeHTML(article.processing_notes || "-")}</span>
+    </div>
+    <div class="summary" style="margin-top:14px"><strong>中文翻译</strong><br>${escapeHTML(article.chinese_translation || "-")}</div>
+    <div class="summary" style="margin-top:14px"><strong>日语内容</strong><br>${escapeHTML(article.japanese_content || article.original_content || "-")}</div>
+  `;
 
   sentenceList.innerHTML = (sentenceResult.data.items || [])
-    .map((sentence) => `<li>${escapeHTML(sentence.sentence_text)}</li>`)
+    .map((sentence, index) => `<li><span class="tag">${index + 1}</span><span>${escapeHTML(sentence.sentence_text)}</span></li>`)
     .join("");
   if (!sentenceList.innerHTML) {
     sentenceList.innerHTML = `<li class="empty-state">当前文章还没有句子拆分结果，可以尝试重新处理。</li>`;
   }
+  sentenceList.classList.add("hidden");
 
   reprocessButton.disabled = article.source_type === "builtin";
   reprocessButton.title = article.source_type === "builtin" ? "内置文章无需重新处理" : "";
@@ -790,26 +857,14 @@ async function loadReadingArticle(articleId) {
     return;
   }
 
-  const { article, sentences } = result.data;
+  const { article } = result.data;
   state.selectedArticleId = article.id;
   state.readingArticle = article;
   hideLookupPopup();
-  readingHeader.textContent = [
-    `标题：${article.title}`,
-    `JLPT：${article.jlpt_level}`,
-    `处理状态：${article.translation_status}`,
-    "提示：在下方正文中选中文本以查词。加入生词本时会把当前上下文句子或半句一起保存为例句。",
-  ].join("\n");
+  readingHeader.innerHTML = `${escapeHTML(article.title)} <span class="badge badge-jlpt">${escapeHTML(article.jlpt_level || "-")}</span>`;
 
-  readingContent.innerHTML = (sentences || [])
-    .map(
-      (sentence) => `
-        <p class="reading-sentence" data-sentence-id="${sentence.id}" data-sentence-text="${escapeHTMLAttribute(sentence.sentence_text)}">
-          <span class="reading-text">${escapeHTML(sentence.sentence_text)}</span>
-        </p>
-      `,
-    )
-    .join("");
+  const text = article.japanese_content || article.original_content || "";
+  readingContent.innerHTML = renderReadingArticleText(text);
   if (!readingContent.innerHTML) {
     readingContent.innerHTML = `<div class="empty-state">当前文章没有可阅读句子。</div>`;
   }
@@ -877,6 +932,7 @@ function renderChallengeQuestion() {
   }
 
   challengeProgress.textContent = `第 ${state.challenge.currentIndex + 1} / ${state.challenge.questions.length} 题`;
+  challengeProgress.nextElementSibling?.querySelector("span")?.style.setProperty("width", `${Math.round(((state.challenge.currentIndex + 1) / state.challenge.questions.length) * 100)}%`);
   challengeSentence.dataset.sentenceId = question.sentence_id;
   challengeSentence.dataset.sentenceText = question.sentence_text;
   challengeSentence.textContent = question.masked_sentence;
@@ -920,6 +976,9 @@ function renderPostQuizQuestion() {
   }
 
   postQuizProgress.textContent = `第 ${state.postQuiz.currentIndex + 1} / ${state.postQuiz.questions.length} 题`;
+  postQuizProgress.nextElementSibling?.querySelector("span")?.style.setProperty("width", `${Math.round(((state.postQuiz.currentIndex + 1) / state.postQuiz.questions.length) * 100)}%`);
+  postQuizQuestion.dataset.sentenceId = question.sentence_id;
+  postQuizQuestion.dataset.sentenceText = question.sentence_text;
   postQuizQuestion.textContent = question.masked_sentence;
   postQuizSource.textContent = `原句：${question.sentence_text}`;
 
@@ -989,7 +1048,7 @@ function renderReviewQuestion() {
 
   const question = item.question;
   reviewProgress.textContent = `第 ${state.review.currentIndex + 1} / ${state.review.items.length} 题`;
-  reviewQuestion.textContent = `「${question.question_text}」的主要中文意思是？`;
+  reviewQuestion.textContent = question.question_text;
   reviewContext.textContent = item.context_sentence ? `上下文：${item.context_sentence}` : "";
 
   const options = [
@@ -1041,8 +1100,9 @@ async function loadVocabularyList() {
       (detail) => `
         <li>
           <button class="link-button vocabulary-item" data-vocabulary-id="${detail.item.id}">
-            <span><strong>${escapeHTML(detail.dictionary_entry.surface)}</strong> <span class="tag">${escapeHTML(detail.item.status)}</span></span>
-            <span class="meta">${escapeHTML(detail.dictionary_entry.primary_meaning_zh)} / ${escapeHTML(detail.dictionary_entry.jlpt_level)}</span>
+            <span><strong class="vocab-surface">${escapeHTML(detail.dictionary_entry.surface)}</strong> <span class="tag status-${escapeHTML(detail.item.status)}">${escapeHTML(detail.item.status)}</span></span>
+            <span class="meta">${escapeHTML(detail.dictionary_entry.reading || "-")} · ${escapeHTML(detail.dictionary_entry.romaji || "-")} · ${escapeHTML(detail.dictionary_entry.jlpt_level)}</span>
+            <span>${escapeHTML(detail.dictionary_entry.primary_meaning_zh)}</span>
             <span class="meta">${escapeHTML(detail.example_sentence || detail.item.source_sentence_text || "-")}</span>
           </button>
         </li>
@@ -1066,22 +1126,15 @@ async function loadVocabularyDetail(vocabularyId) {
 
   state.selectedVocabularyId = vocabularyId;
   const detail = result.data;
-  vocabularyDetail.textContent = [
-    `词形：${detail.dictionary_entry.surface}`,
-    `原形：${detail.dictionary_entry.lemma}`,
-    `读音：${detail.dictionary_entry.reading || "-"}`,
-    `中文释义：${detail.dictionary_entry.meaning_zh}`,
-    `主要释义：${detail.dictionary_entry.primary_meaning_zh}`,
-    `当前状态：${detail.item.status}`,
-    `来源文章：${detail.article_title || "-"}`,
-    `查询原文：${detail.item.selected_text}`,
-    "",
-    "保存的例句：",
-    detail.example_sentence || detail.item.source_sentence_text || "-",
-    "",
-    "词典自带例句：",
-    detail.dictionary_entry.example_sentence || "-",
-  ].join("\n");
+  vocabularyDetail.innerHTML = `
+    <div class="vocab-surface">${escapeHTML(detail.dictionary_entry.surface)}</div>
+    <p class="meta">${escapeHTML(detail.dictionary_entry.lemma || "-")} · ${escapeHTML(detail.dictionary_entry.reading || "-")} · ${escapeHTML(detail.dictionary_entry.romaji || "-")}</p>
+    <p><span class="tag">${escapeHTML(detail.dictionary_entry.part_of_speech || "-")}</span> <span class="badge badge-jlpt">${escapeHTML(detail.dictionary_entry.jlpt_level || "-")}</span> <span class="tag status-${escapeHTML(detail.item.status)}">${escapeHTML(detail.item.status)}</span></p>
+    <p><strong>中文释义</strong><br>${escapeHTML(detail.dictionary_entry.meaning_zh || detail.dictionary_entry.primary_meaning_zh || "-")}</p>
+    <p><strong>上下文</strong><br>${escapeHTML(detail.example_sentence || detail.item.source_sentence_text || "-")}</p>
+    <p class="meta">来源文章：${escapeHTML(detail.article_title || "-")} · 查询原文：${escapeHTML(detail.item.selected_text || "-")}</p>
+    <p class="meta">词典例句：${escapeHTML(detail.dictionary_entry.example_sentence || "-")}</p>
+  `;
   openVocabularyArticleButton.disabled = !detail.item.article_id;
 }
 
@@ -1125,7 +1178,8 @@ function getSelectionState() {
   const text = selection.toString().trim();
   const withinReading = readingContent.contains(range.commonAncestorContainer);
   const withinChallenge = challengeSentence.contains(range.commonAncestorContainer);
-  if (!text || (!withinReading && !withinChallenge)) {
+  const withinPostQuiz = postQuizQuestion.contains(range.commonAncestorContainer);
+  if (!text || (!withinReading && !withinChallenge && !withinPostQuiz)) {
     return null;
   }
   if (text.length > 40) {
@@ -1143,7 +1197,7 @@ function getSelectionState() {
   return {
     text,
     rect,
-    sentenceId: Number(sentenceElement.dataset.sentenceId),
+    sentenceId: Number(sentenceElement.dataset.sentenceId) || null,
     sentenceText,
     contextSnippet: extractContextSnippet(sentenceText, text),
   };
@@ -1160,11 +1214,30 @@ function findSentenceElement(node) {
   return null;
 }
 
+function renderReadingArticleText(text) {
+  const normalized = String(text || "").replace(/\r\n/g, "\n").trim();
+  if (!normalized) {
+    return "";
+  }
+  return normalized
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+    .map(
+      (paragraph) => `
+        <p class="reading-sentence" data-sentence-id="" data-sentence-text="${escapeHTMLAttribute(paragraph)}">
+          <span class="reading-text">${escapeHTML(paragraph)}</span>
+        </p>
+      `,
+    )
+    .join("");
+}
+
 async function lookupSelection(selectionState) {
   positionPopup(selectionState.rect);
   popup.classList.remove("hidden");
   popupTitle.textContent = `查词：${selectionState.text}`;
-  popupBody.textContent = "正在查询词典...";
+  popupBody.innerHTML = renderLookupStatus("正在查询本地词典...");
   addVocabularyButton.disabled = true;
   addVocabularyButton.textContent = "加入生词本";
 
@@ -1179,26 +1252,43 @@ async function lookupSelection(selectionState) {
 
   if (state.lookup.lastLookupKey === lookupKey && state.lookup.currentEntry) {
     await refreshVocabularyButton(state.lookup.currentEntry.id);
-    popupBody.textContent = formatDictionaryEntry(state.lookup.currentEntry, state.lookup.currentGenerated, state.lookup.currentContextSnippet);
+    popupBody.innerHTML = formatDictionaryEntry(state.lookup.currentEntry, state.lookup.currentGenerated, state.lookup.currentContextSnippet);
     return;
   }
 
   state.lookup.inFlightKey = lookupKey;
   try {
-    const lookupResult = await request(`/api/dictionary/lookup?text=${encodeURIComponent(selectionState.text)}`, {
-      loadingMessage: "正在查词...",
-      timeoutMs: 60000,
+    const searchResult = await request(`/api/dictionary/search?text=${encodeURIComponent(selectionState.text)}`, {
+      loadingMessage: "正在查询本地词典...",
     });
-    if (!lookupResult.ok) {
+    if (!searchResult.ok) {
       popupBody.textContent = "词典查询失败，可以重新选择文本再试。";
       return;
     }
 
-    state.lookup.currentEntry = lookupResult.data.entry;
-    state.lookup.currentGenerated = lookupResult.data.generated;
+    let entry = searchResult.data.entry;
+    let generated = false;
+    if (!searchResult.data.found) {
+      popupBody.innerHTML = renderLookupStatus("本地词典未命中，正在调用 AI 生成释义、词性和例句...");
+      const generateResult = await request("/api/dictionary/generate", {
+        method: "POST",
+        body: JSON.stringify({ text: selectionState.text }),
+        loadingMessage: "正在调用 AI 生成词条...",
+        timeoutMs: 60000,
+      });
+      if (!generateResult.ok) {
+        popupBody.textContent = "AI 生成词条失败，可以检查 AI 配置后重试。";
+        return;
+      }
+      entry = generateResult.data.entry;
+      generated = generateResult.data.generated;
+    }
+
+    state.lookup.currentEntry = entry;
+    state.lookup.currentGenerated = generated;
     state.lookup.lastLookupKey = lookupKey;
-    popupBody.textContent = formatDictionaryEntry(lookupResult.data.entry, lookupResult.data.generated, selectionState.contextSnippet);
-    await refreshVocabularyButton(lookupResult.data.entry.id);
+    popupBody.innerHTML = formatDictionaryEntry(entry, generated, selectionState.contextSnippet);
+    await refreshVocabularyButton(entry.id);
   } finally {
     state.lookup.inFlightKey = "";
   }
@@ -1234,21 +1324,30 @@ function hideLookupPopup() {
 }
 
 function formatDictionaryEntry(entry, generated, contextSnippet) {
-  return [
-    `词形：${entry.surface}`,
-    `原形：${entry.lemma}`,
-    `读音：${entry.reading || "-"}`,
-    `罗马音：${entry.romaji || "-"}`,
-    `词性：${entry.part_of_speech}`,
-    `中文释义：${entry.meaning_zh}`,
-    `主要释义：${entry.primary_meaning_zh}`,
-    `JLPT：${entry.jlpt_level}`,
-    `本次保存例句：${contextSnippet || "-"}`,
-    `词典例句：${entry.example_sentence || "-"}`,
-    generated ? "说明：当前为占位 AI 词条，后续可替换为真实模型生成结果。" : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
+  return `
+    <div class="dictionary-row"><strong>原形</strong><span>${escapeHTML(entry.lemma || "-")}</span></div>
+    <div class="dictionary-row"><strong>读音</strong><span>${escapeHTML(entry.reading || "-")} / ${escapeHTML(entry.romaji || "-")}</span></div>
+    <div class="dictionary-row"><strong>词性</strong><span class="tag">${escapeHTML(entry.part_of_speech || "-")}</span> <span class="badge badge-jlpt">${escapeHTML(entry.jlpt_level || "-")}</span></div>
+    <div><strong>中文释义</strong><br>${escapeHTML(entry.meaning_zh || entry.primary_meaning_zh || "-")}</div>
+    <div><strong>保存例句</strong><br>${escapeHTML(contextSnippet || "-")}</div>
+    <div class="meta">${generated ? "本地未命中，已由 AI 生成并写入词典。" : "来自本地词典或已缓存词条。"}</div>
+  `;
+}
+
+function renderLookupStatus(message) {
+  return `<div class="lookup-status"><span class="loading-spinner"></span><span>${escapeHTML(message)}</span></div>`;
+}
+
+function statCard(label, value) {
+  return `<div class="card stat-card"><span class="meta">${escapeHTML(label)}</span><strong style="font-size:28px">${escapeHTML(value ?? "-")}</strong></div>`;
+}
+
+function percent(correct, total) {
+  const denominator = Number(total || 0);
+  if (!denominator) {
+    return "0%";
+  }
+  return `${Math.round((Number(correct || 0) / denominator) * 100)}%`;
 }
 
 function extractContextSnippet(sentenceText, selectedText) {
@@ -1257,7 +1356,7 @@ function extractContextSnippet(sentenceText, selectedText) {
   if (!text || !needle) {
     return text;
   }
-  if (text.length <= 36) {
+  if (text.length <= 80) {
     return text;
   }
 
@@ -1265,29 +1364,71 @@ function extractContextSnippet(sentenceText, selectedText) {
   if (index < 0) {
     return text;
   }
+  const chars = Array.from(text);
+  const selectedStart = Array.from(text.slice(0, index)).length;
+  const selectedEnd = selectedStart + Array.from(needle).length;
+  const start = findContextStart(chars, selectedStart);
+  const end = findContextEnd(chars, selectedEnd);
+  return chars.slice(start, end).join("").trim() || text;
+}
 
-  const delimiters = new Set(["。", "！", "？", "，", "、", ",", ";", "；"]);
-  let start = 0;
-  for (let i = index - 1; i >= 0; i -= 1) {
-    if (delimiters.has(text[i])) {
-      start = i + 1;
-      break;
+function findContextStart(chars, selectedStart) {
+  let quoteDepth = 0;
+  for (let i = selectedStart - 1; i >= 0; i -= 1) {
+    const ch = chars[i];
+    if (isClosingQuote(ch)) {
+      quoteDepth += 1;
+      continue;
+    }
+    if (isOpeningQuote(ch) && quoteDepth > 0) {
+      quoteDepth -= 1;
+      continue;
+    }
+    if (quoteDepth === 0 && isSentenceTerminator(ch)) {
+      return i + 1;
     }
   }
+  return 0;
+}
 
-  let end = text.length;
-  for (let i = index + needle.length; i < text.length; i += 1) {
-    if (delimiters.has(text[i])) {
-      end = i + 1;
-      break;
+function findContextEnd(chars, selectedEnd) {
+  let quoteDepth = 0;
+  let pendingQuotedEnd = false;
+  for (let i = selectedEnd; i < chars.length; i += 1) {
+    const ch = chars[i];
+    if (isOpeningQuote(ch)) {
+      quoteDepth += 1;
+      continue;
+    }
+    if (isSentenceTerminator(ch)) {
+      if (quoteDepth > 0) {
+        pendingQuotedEnd = true;
+        continue;
+      }
+      return i + 1;
+    }
+    if (isClosingQuote(ch)) {
+      if (quoteDepth > 0) {
+        quoteDepth -= 1;
+      }
+      if (pendingQuotedEnd && quoteDepth === 0) {
+        return i + 1;
+      }
     }
   }
+  return chars.length;
+}
 
-  const snippet = text.slice(start, end).trim();
-  if (snippet.length >= 8 && snippet.length < text.length) {
-    return snippet;
-  }
-  return text;
+function isSentenceTerminator(ch) {
+  return ["。", "！", "？", "!", "?"].includes(ch);
+}
+
+function isOpeningQuote(ch) {
+  return ["「", "『", "“", "‘", "（", "(", "《"].includes(ch);
+}
+
+function isClosingQuote(ch) {
+  return ["」", "』", "”", "’", "）", ")", "》"].includes(ch);
 }
 
 async function request(url, options = {}) {

@@ -22,6 +22,22 @@ func NewDictionaryService(dictionaryRepo *repository.DictionaryRepository, aiSer
 	}
 }
 
+func (s *DictionaryService) Lookup(ctx context.Context, text string) (*model.DictionaryEntry, bool, error) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return nil, false, fmt.Errorf("text is required")
+	}
+
+	entry, err := s.dictionaryRepo.FindByText(ctx, text)
+	if err == nil {
+		return entry, true, nil
+	}
+	if err == repository.ErrDictionaryEntryNotFound {
+		return nil, false, nil
+	}
+	return nil, false, err
+}
+
 func (s *DictionaryService) LookupOrGenerate(ctx context.Context, text string) (*model.DictionaryEntry, bool, error) {
 	text = strings.TrimSpace(text)
 	if text == "" {
