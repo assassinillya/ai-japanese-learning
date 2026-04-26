@@ -12,11 +12,15 @@ import (
 )
 
 type AIService struct {
-	aiRepo *repository.AIRepository
+	aiRepo   *repository.AIRepository
+	provider AIProvider
 }
 
-func NewAIService(aiRepo *repository.AIRepository) *AIService {
-	return &AIService{aiRepo: aiRepo}
+func NewAIService(aiRepo *repository.AIRepository, provider AIProvider) *AIService {
+	return &AIService{
+		aiRepo:   aiRepo,
+		provider: provider,
+	}
 }
 
 func (s *AIService) CacheKey(taskType, inputHash, modelName, promptVersion string) string {
@@ -26,6 +30,24 @@ func (s *AIService) CacheKey(taskType, inputHash, modelName, promptVersion strin
 func (s *AIService) HashInput(input string) string {
 	sum := sha256.Sum256([]byte(input))
 	return hex.EncodeToString(sum[:])
+}
+
+func (s *AIService) ProviderAvailable() bool {
+	return s != nil && s.provider != nil
+}
+
+func (s *AIService) ModelName(fallback string) string {
+	if s != nil && s.provider != nil && s.provider.ModelName() != "" {
+		return s.provider.ModelName()
+	}
+	return fallback
+}
+
+func (s *AIService) CompleteJSON(ctx context.Context, prompt AIPrompt) (string, error) {
+	if s == nil || s.provider == nil {
+		return "", fmt.Errorf("ai provider is not configured")
+	}
+	return s.provider.CompleteJSON(ctx, prompt)
 }
 
 func (s *AIService) GetCached(ctx context.Context, cacheKey string) (*model.AICacheEntry, bool, error) {

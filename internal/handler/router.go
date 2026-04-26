@@ -101,7 +101,7 @@ func NewRouter(
 func (r *Router) handleHealth(w http.ResponseWriter, req *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{
 		"status":  "ok",
-		"version": "v1.1",
+		"version": "v1.2",
 	})
 }
 

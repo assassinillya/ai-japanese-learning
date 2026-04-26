@@ -59,12 +59,15 @@ func (s *DictionaryService) generateDictionaryEntry(ctx context.Context, text st
 
 	const (
 		taskType      = "dictionary_entry"
-		modelName     = "placeholder-dictionary-generator"
-		promptVersion = "v0.8"
+		fallbackModel = "placeholder-dictionary-generator"
+		promptVersion = aiPromptVersionV12
 	)
-	request := map[string]string{
+	modelName := s.aiService.ModelName(fallbackModel)
+	prompt := promptDictionaryEntry(text)
+	request := map[string]any{
 		"text":           text,
 		"prompt_version": promptVersion,
+		"prompt":         prompt,
 	}
 	inputHash := s.aiService.HashInput(text)
 	cacheKey := s.aiService.CacheKey(taskType, inputHash, modelName, promptVersion)
@@ -84,11 +87,20 @@ func (s *DictionaryService) generateDictionaryEntry(ctx context.Context, text st
 		return &entry, nil
 	}
 
-	entry := buildGeneratedDictionaryEntry(text)
+	entry, err := s.generateDictionaryEntryWithAI(ctx, text, prompt, taskType, request, modelName, promptVersion)
+	if err != nil {
+		s.aiService.LogFailure(ctx, taskType, request, err, modelName, promptVersion)
+		entry = buildGeneratedDictionaryEntry(text)
+	} else {
+		aiModel := modelName
+		prompt := promptVersion
+		entry.AIModel = &aiModel
+		entry.PromptVersion = &prompt
+	}
 	aiModel := modelName
-	prompt := promptVersion
+	promptName := promptVersion
 	entry.AIModel = &aiModel
-	entry.PromptVersion = &prompt
+	entry.PromptVersion = &promptName
 	if err := validateDictionaryEntry(entry); err != nil {
 		s.aiService.LogFailure(ctx, taskType, request, err, modelName, promptVersion)
 		return nil, err
@@ -97,6 +109,32 @@ func (s *DictionaryService) generateDictionaryEntry(ctx context.Context, text st
 		return nil, err
 	}
 	return entry, nil
+}
+
+func (s *DictionaryService) generateDictionaryEntryWithAI(ctx context.Context, text string, prompt AIPrompt, taskType string, request any, modelName, promptVersion string) (*model.DictionaryEntry, error) {
+	if !s.aiService.ProviderAvailable() {
+		return nil, fmt.Errorf("ai provider unavailable")
+	}
+	raw, err := s.aiService.CompleteJSON(ctx, prompt)
+	if err != nil {
+		return nil, err
+	}
+	var entry model.DictionaryEntry
+	if err := json.Unmarshal([]byte(raw), &entry); err != nil {
+		return nil, fmt.Errorf("parse ai dictionary entry: %w", err)
+	}
+	if strings.TrimSpace(entry.Surface) == "" {
+		entry.Surface = text
+	}
+	entry.Source = "ai"
+	entry.Verified = false
+	if strings.TrimSpace(entry.ConfidenceScore) == "" {
+		entry.ConfidenceScore = "0.80"
+	}
+	if err := validateDictionaryEntry(&entry); err != nil {
+		return nil, err
+	}
+	return &entry, nil
 }
 
 func validateDictionaryEntry(entry *model.DictionaryEntry) error {

@@ -1,6 +1,6 @@
-# ai-japanese-learning v1.1
+# ai-japanese-learning v1.2
 
-当前版本已经从 `v1.0` 推进到 `v1.1`，补齐新手引导和基础学习统计。
+当前版本已经从 `v1.1` 推进到 `v1.2`，新增可配置 AI 接入接口和各类 AI Prompt 模板，同时继续保留占位生成器作为 fallback。
 
 已完成：
 
@@ -51,6 +51,9 @@
 - 新手引导页面和完成引导接口 `POST /api/profile/onboarding/complete`
 - 基础学习统计接口 `GET /api/stats/learning`
 - 统计概览页面：文章、生词、待复习、阅读答题、复习记录
+- 可配置 AI provider 接口，支持 OpenAI-compatible Chat Completions
+- AI Prompt 模板：词典生成、文章翻译、挑战阅读、阅读后测验、词汇复习
+- 词典生成、文章翻译、词汇复习题已可优先调用真实 AI，失败时降级到占位生成
 - 前端基础加载状态、错误提示、空状态和查词防重复请求
 - Dockerfile、docker-compose 和 `.env.example` 基础部署配置
 - MVP 测试数据 `seeds/002_mvp_seed_v09.sql`
@@ -110,6 +113,12 @@
   - 新增独立新手引导页和完成引导接口。
   - 新增基础学习统计接口和统计概览页面。
   - 将真实 AI 服务商、通用 JSON Schema、自动重试队列、文章标签、错题本和生产级迁移流程继续列为后续 1.x 增强。
+- `v1.2`
+  - 新增 `AIProvider` 接口和 OpenAI-compatible provider。
+  - 新增 `AI_PROVIDER`、`AI_BASE_URL`、`AI_API_KEY`、`AI_MODEL` 配置。
+  - 新增各类 AI Prompt 模板，统一要求 JSON 输出。
+  - 词典生成、文章翻译、词汇复习题支持配置真实 AI 后优先调用；未配置或失败时继续使用占位逻辑。
+  - 生词本能力保持完整：添加、列表、详情、状态筛选、状态修改、删除、上下文保存和复习联动。
 
 后续每次功能或结构改动，都需要同步更新 `README.md` 的版本记录和当前说明。
 
@@ -162,6 +171,27 @@ postgres://postgres:<password>@localhost:5432/japanese_learning?sslmode=disable
 - `APP_TOKEN_SECRET`
 - `SERVER_ADDRESS`
 - `PORT`
+- `AI_PROVIDER`
+- `AI_BASE_URL`
+- `AI_API_KEY`
+- `AI_MODEL`
+
+AI 配置说明：
+
+```text
+AI_PROVIDER=placeholder
+```
+
+默认不调用外部 AI，继续使用项目内置占位生成器。
+
+如需接入 OpenAI-compatible Chat Completions：
+
+```text
+AI_PROVIDER=openai-compatible
+AI_BASE_URL=https://api.openai.com/v1
+AI_API_KEY=<your-api-key>
+AI_MODEL=gpt-4o-mini
+```
 
 ## 数据库初始化
 
@@ -257,6 +287,7 @@ docker compose up --build
 - `v0.9` 仍是单体 MVP 形态，部署配置只负责启动应用和 PostgreSQL；迁移执行仍保留为显式步骤，避免应用启动时自动改库。
 - `v1.0` 仍沿用当前占位 AI 生成器；真实 AI 服务商、通用 JSON Schema 校验和自动重试队列尚未接入。
 - `v1.1` 完成新手路径和基础统计，但仍未接入真实 AI 服务商、通用 JSON Schema 校验、AI 自动重试队列、文章标签、错题本和生产级自动迁移。
+- `v1.2` 已具备 OpenAI-compatible AI 接口和 Prompt 模板；真实 AI 调用依赖环境变量配置。挑战阅读和阅读后测验 Prompt 已准备好，但当前生成仍优先使用稳定的本地占位算法，后续可继续切换为 AI 题目生成。
 
 ## v0.5 Review 记录
 
@@ -365,3 +396,15 @@ docker compose up --build
 - `node --check internal/web/assets/app.js` 通过。
 - `POST /api/profile/onboarding/complete` 可将新用户引导状态置为完成。
 - `GET /api/stats/learning` 可返回文章、生词、待复习、阅读答题、词汇复习和生词状态统计。
+
+## v1.2 验证记录
+
+本轮新增真实 AI 接入基础设施和 Prompt 模板，并保持未配置 AI 时的本地可运行能力。
+
+已验证：
+
+- `go test ./...` 通过。
+- `node --check internal/web/assets/app.js` 通过。
+- 未配置 `AI_API_KEY` 时，词典生成、文章翻译、词汇复习仍可走占位 fallback。
+- `GET /api/health` 返回 `version = v1.2`。
+- `AI_PROVIDER=openai-compatible` 时会通过 OpenAI-compatible Chat Completions 接口请求 JSON 输出。

@@ -69,9 +69,14 @@ func (s *ReviewService) GetOrCreateQuestion(ctx context.Context, entry model.Dic
 		return nil, err
 	}
 
-	aiModel := "placeholder-vocabulary-review-generator"
-	promptVersion := "v0.8-review"
+	fallbackModel := "placeholder-vocabulary-review-generator"
+	aiModel := fallbackModel
+	if s.aiService != nil {
+		aiModel = s.aiService.ModelName(fallbackModel)
+	}
+	promptVersion := aiPromptVersionV12
 	taskType := "vocabulary_review_question"
+	prompt := promptReviewQuestion(entry)
 	request := reviewQuestionCacheRequest{
 		DictionaryEntryID: entry.ID,
 		Surface:           entry.Surface,
@@ -79,6 +84,7 @@ func (s *ReviewService) GetOrCreateQuestion(ctx context.Context, entry model.Dic
 		MeaningZH:         entry.MeaningZH,
 		PartOfSpeech:      entry.PartOfSpeech,
 		JLPTLevel:         entry.JLPTLevel,
+		Prompt:            prompt,
 	}
 	cacheKey, inputHash := s.reviewQuestionCacheKey(request, taskType, aiModel, promptVersion)
 	if cached, ok := s.getCachedReviewQuestion(ctx, cacheKey); ok {
@@ -88,23 +94,29 @@ func (s *ReviewService) GetOrCreateQuestion(ctx context.Context, entry model.Dic
 		return s.reviewRepo.CreateQuestion(ctx, cached)
 	}
 
-	options, correctOption, err := s.buildMeaningOptions(ctx, entry)
+	question, err := s.generateReviewQuestionWithAI(ctx, entry, prompt)
 	if err != nil {
-		return nil, err
+		if s.aiService != nil {
+			s.aiService.LogFailure(ctx, taskType, request, err, aiModel, promptVersion)
+		}
+		options, correctOption, err := s.buildMeaningOptions(ctx, entry)
+		if err != nil {
+			return nil, err
+		}
+		question = &model.VocabularyReviewQuestion{
+			DictionaryEntryID: entry.ID,
+			QuestionText:      entry.Surface,
+			CorrectAnswer:     meaningForReview(entry),
+			OptionA:           options[0],
+			OptionB:           options[1],
+			OptionC:           options[2],
+			OptionD:           options[3],
+			CorrectOption:     correctOption,
+			ExplanationZH:     fmt.Sprintf("「%s」的主要中文意思是：%s。", entry.Surface, meaningForReview(entry)),
+		}
 	}
-	question := &model.VocabularyReviewQuestion{
-		DictionaryEntryID: entry.ID,
-		QuestionText:      entry.Surface,
-		CorrectAnswer:     meaningForReview(entry),
-		OptionA:           options[0],
-		OptionB:           options[1],
-		OptionC:           options[2],
-		OptionD:           options[3],
-		CorrectOption:     correctOption,
-		ExplanationZH:     fmt.Sprintf("「%s」的主要中文意思是：%s。", entry.Surface, meaningForReview(entry)),
-		AIModel:           &aiModel,
-		PromptVersion:     &promptVersion,
-	}
+	question.AIModel = &aiModel
+	question.PromptVersion = &promptVersion
 	s.storeCachedReviewQuestion(ctx, taskType, inputHash, cacheKey, request, question, aiModel, promptVersion)
 	return s.reviewRepo.CreateQuestion(ctx, question)
 }
@@ -224,12 +236,45 @@ func meaningForReview(entry model.DictionaryEntry) string {
 }
 
 type reviewQuestionCacheRequest struct {
-	DictionaryEntryID int64  `json:"dictionary_entry_id"`
-	Surface           string `json:"surface"`
-	PrimaryMeaningZH  string `json:"primary_meaning_zh"`
-	MeaningZH         string `json:"meaning_zh"`
-	PartOfSpeech      string `json:"part_of_speech"`
-	JLPTLevel         string `json:"jlpt_level"`
+	DictionaryEntryID int64    `json:"dictionary_entry_id"`
+	Surface           string   `json:"surface"`
+	PrimaryMeaningZH  string   `json:"primary_meaning_zh"`
+	MeaningZH         string   `json:"meaning_zh"`
+	PartOfSpeech      string   `json:"part_of_speech"`
+	JLPTLevel         string   `json:"jlpt_level"`
+	Prompt            AIPrompt `json:"prompt"`
+}
+
+func (s *ReviewService) generateReviewQuestionWithAI(ctx context.Context, entry model.DictionaryEntry, prompt AIPrompt) (*model.VocabularyReviewQuestion, error) {
+	if s.aiService == nil || !s.aiService.ProviderAvailable() {
+		return nil, fmt.Errorf("ai provider unavailable")
+	}
+	raw, err := s.aiService.CompleteJSON(ctx, prompt)
+	if err != nil {
+		return nil, err
+	}
+	var question model.VocabularyReviewQuestion
+	if err := json.Unmarshal([]byte(raw), &question); err != nil {
+		return nil, fmt.Errorf("parse ai review question: %w", err)
+	}
+	question.DictionaryEntryID = entry.ID
+	if strings.TrimSpace(question.QuestionText) == "" {
+		question.QuestionText = entry.Surface
+	}
+	if question.CorrectAnswer != meaningForReview(entry) {
+		return nil, fmt.Errorf("ai review question correct_answer does not match dictionary primary meaning")
+	}
+	if !slices.Contains([]string{"A", "B", "C", "D"}, question.CorrectOption) {
+		return nil, fmt.Errorf("ai review question invalid correct option")
+	}
+	if strings.TrimSpace(question.OptionA) == "" || strings.TrimSpace(question.OptionB) == "" ||
+		strings.TrimSpace(question.OptionC) == "" || strings.TrimSpace(question.OptionD) == "" {
+		return nil, fmt.Errorf("ai review question missing options")
+	}
+	if strings.TrimSpace(question.ExplanationZH) == "" {
+		question.ExplanationZH = fmt.Sprintf("「%s」的主要中文意思是：%s。", entry.Surface, meaningForReview(entry))
+	}
+	return &question, nil
 }
 
 func (s *ReviewService) reviewQuestionCacheKey(request reviewQuestionCacheRequest, taskType, aiModel, promptVersion string) (string, string) {
