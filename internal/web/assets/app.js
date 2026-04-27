@@ -97,6 +97,7 @@ const postQuizResultsList = document.getElementById("post-quiz-results-list");
 const reviewRecordsList = document.getElementById("review-records-list");
 const vocabularyList = document.getElementById("vocabulary-list");
 const vocabularyDetail = document.getElementById("vocabulary-detail");
+const vocabularySRSSummary = document.getElementById("vocabulary-srs-summary");
 const vocabularyFilterForm = document.getElementById("vocabulary-filter-form");
 const vocabularyStatusButtons = document.querySelectorAll("[data-vocabulary-status]");
 const deleteVocabularyButton = document.getElementById("delete-vocabulary-button");
@@ -646,7 +647,7 @@ vocabularySelectAll?.addEventListener("change", () => {
 });
 
 batchMasterVocabularyButton?.addEventListener("click", async () => {
-  await batchUpdateVocabularyStatus("mastered", "熟练");
+  await batchUpdateVocabularyStatus("mastered", "熟悉");
 });
 
 batchLearningVocabularyButton?.addEventListener("click", async () => {
@@ -828,8 +829,8 @@ async function submitCurrentReviewAnswer() {
     result.data.is_correct ? "回答正确" : "回答错误",
     `正确选项：${result.data.correct_option}`,
     `正确答案：${result.data.correct_answer}`,
-    `当前状态：${result.data.status}`,
-    `下次复习：${formatDateTime(result.data.next_review_at)}`,
+    `当前状态：${vocabularyStatusLabel(result.data.status)} · 熟练度 ${result.data.proficiency ?? result.data.familiarity ?? 0}%`,
+    `下次复习：${result.data.status === "mastered" ? "已熟悉，不再进入每日复习" : formatDateTime(result.data.next_review_at)}`,
     `解析：${result.data.explanation}`,
   ].join("\n");
   await loadVocabularyList();
@@ -849,7 +850,7 @@ masterReviewWordButton?.addEventListener("click", async () => {
   const result = await request(`/api/vocabulary/${item.user_vocabulary.id}/status`, {
     method: "PUT",
     body: JSON.stringify({ status: "mastered" }),
-    loadingMessage: "正在标记熟练...",
+    loadingMessage: "正在标记熟悉...",
   });
   if (!result.ok) {
     return;
@@ -863,9 +864,9 @@ masterReviewWordButton?.addEventListener("click", async () => {
   reviewFeedback.classList.add("hidden");
   reviewFeedback.textContent = "";
   await loadVocabularyList();
-  setMessage("已标记熟练，后续复习会跳过这个词");
+  setMessage("已标记熟悉，后续复习会跳过这个词");
   if (state.review.items.length === 0) {
-    reviewHeader.textContent = "今日复习完成，熟练词已移出复习队列。";
+    reviewHeader.textContent = "今日复习完成，熟悉词已移出复习队列。";
     reviewCard.classList.add("hidden");
     return;
   }
@@ -1081,10 +1082,10 @@ async function loadLearningStats() {
     </div>
     <div class="card" style="margin-top:18px">
       <h3>生词状态分布</h3>
-      ${["new", "learning", "reviewing", "mastered", "ignored"].map((key) => {
-        const count = statusCounts[key] || 0;
+      ${["new", "learning", "mastered"].map((key) => {
+        const count = key === "learning" ? Number(statusCounts.learning || 0) + Number(statusCounts.reviewing || 0) : statusCounts[key] || 0;
         const width = Math.max(4, Math.round((count / totalStatus) * 100));
-        return `<div class="stat-row"><span class="tag status-${key}">${key}</span><div class="progress-bar"><span style="width:${width}%"></span></div><strong>${count}</strong></div>`;
+        return `<div class="stat-row"><span class="tag status-${key}">${vocabularyStatusLabel(key)}</span><div class="progress-bar"><span style="width:${width}%"></span></div><strong>${count}</strong></div>`;
       }).join("")}
     </div>
     <div class="card" style="margin-top:18px">
@@ -2000,11 +2001,56 @@ function vocabularyStatusLabel(status) {
   const labels = {
     new: "新词",
     learning: "学习中",
-    reviewing: "复习中",
-    mastered: "熟练",
+    reviewing: "学习中",
+    mastered: "熟悉",
     ignored: "忽略",
   };
   return escapeHTML(labels[status] || status || "-");
+}
+
+function visibleVocabularyStatus(status) {
+  return status === "reviewing" ? "learning" : status;
+}
+
+function proficiencyPercent(item) {
+  const value = Number(item?.familiarity || 0);
+  if (value <= 5) {
+    return Math.max(0, Math.min(100, value * 20));
+  }
+  return Math.max(0, Math.min(100, value));
+}
+
+function renderProficiencyBar(value) {
+  return `
+    <div class="proficiency-row">
+      <span>熟练度</span>
+      <div class="proficiency-bar"><span style="width:${value}%"></span></div>
+      <strong>${value}%</strong>
+    </div>
+  `;
+}
+
+function renderVocabularySRSSummary(items) {
+  if (!vocabularySRSSummary) {
+    return;
+  }
+  const summary = items.reduce(
+    (acc, detail) => {
+      const status = visibleVocabularyStatus(detail.item.status);
+      if (status === "new") acc.newCount++;
+      if (status === "learning") acc.learningCount++;
+      if (status === "mastered") acc.masteredCount++;
+      if (status !== "mastered" && status !== "ignored" && new Date(detail.item.next_review_at) <= new Date()) acc.dueCount++;
+      return acc;
+    },
+    { newCount: 0, learningCount: 0, masteredCount: 0, dueCount: 0 },
+  );
+  vocabularySRSSummary.innerHTML = `
+    <div><strong>${summary.dueCount}</strong><span>今日待学/复习</span></div>
+    <div><strong>${summary.newCount}</strong><span>新词</span></div>
+    <div><strong>${summary.learningCount}</strong><span>学习中</span></div>
+    <div><strong>${summary.masteredCount}</strong><span>熟悉</span></div>
+  `;
 }
 
 async function loadVocabularyList() {
@@ -2027,6 +2073,7 @@ async function loadVocabularyList() {
   }
 
   const items = result.data.items || [];
+  renderVocabularySRSSummary(items);
   state.selectedVocabularyIds = new Set([...state.selectedVocabularyIds].filter((id) => items.some((detail) => detail.item.id === id)));
   updateVocabularyBatchState();
   if (items.length === 0) {
@@ -2042,9 +2089,10 @@ async function loadVocabularyList() {
               <input class="vocabulary-select-checkbox" type="checkbox" data-vocabulary-id="${detail.item.id}" ${state.selectedVocabularyIds.has(detail.item.id) ? "checked" : ""} />
             </label>
             <button class="link-button vocabulary-item" data-vocabulary-id="${detail.item.id}">
-              <span><strong class="vocab-surface">${escapeHTML(detail.dictionary_entry.surface)}</strong> <span class="tag status-${escapeHTML(detail.item.status)}">${vocabularyStatusLabel(detail.item.status)}</span></span>
+              <span><strong class="vocab-surface">${escapeHTML(detail.dictionary_entry.surface)}</strong> <span class="tag status-${escapeHTML(visibleVocabularyStatus(detail.item.status))}">${vocabularyStatusLabel(detail.item.status)}</span></span>
               <span class="meta">${escapeHTML(detail.dictionary_entry.reading || "-")} · ${escapeHTML(detail.dictionary_entry.romaji || "-")} · ${escapeHTML(detail.dictionary_entry.jlpt_level)}</span>
               <span>${escapeHTML(detail.dictionary_entry.primary_meaning_zh)}</span>
+              ${renderProficiencyBar(proficiencyPercent(detail.item))}
               <span class="meta">${escapeHTML(detail.example_sentence || detail.item.source_sentence_text || "-")}</span>
             </button>
           </div>
@@ -2081,10 +2129,14 @@ async function loadVocabularyDetail(vocabularyId) {
 
   state.selectedVocabularyId = vocabularyId;
   const detail = result.data;
+  const proficiency = proficiencyPercent(detail.item);
   vocabularyDetail.innerHTML = `
     <div class="vocab-surface">${escapeHTML(detail.dictionary_entry.surface)}</div>
     <p class="meta">${escapeHTML(detail.dictionary_entry.lemma || "-")} · ${escapeHTML(detail.dictionary_entry.reading || "-")} · ${escapeHTML(detail.dictionary_entry.romaji || "-")}</p>
-    <p><span class="tag">${escapeHTML(detail.dictionary_entry.part_of_speech || "-")}</span> <span class="badge badge-jlpt">${escapeHTML(detail.dictionary_entry.jlpt_level || "-")}</span> <span class="tag status-${escapeHTML(detail.item.status)}">${escapeHTML(detail.item.status)}</span></p>
+    <p><span class="tag">${escapeHTML(detail.dictionary_entry.part_of_speech || "-")}</span> <span class="badge badge-jlpt">${escapeHTML(detail.dictionary_entry.jlpt_level || "-")}</span> <span class="tag status-${escapeHTML(visibleVocabularyStatus(detail.item.status))}">${vocabularyStatusLabel(detail.item.status)}</span></p>
+    ${renderProficiencyBar(proficiency)}
+    <p class="meta">正确 ${detail.item.correct_count || 0} 次 · 错误 ${detail.item.wrong_count || 0} 次 · 连续正确 ${detail.item.consecutive_correct_count || 0} 次</p>
+    <p class="meta">下次复习：${visibleVocabularyStatus(detail.item.status) === "mastered" ? "已熟悉，不再进入每日复习" : formatDateTime(detail.item.next_review_at)}</p>
     <p><strong>中文释义</strong><br>${escapeHTML(detail.dictionary_entry.meaning_zh || detail.dictionary_entry.primary_meaning_zh || "-")}</p>
     <p><strong>上下文</strong><br>${escapeHTML(detail.example_sentence || detail.item.source_sentence_text || "-")}</p>
     <p class="meta">来源文章：${escapeHTML(detail.article_title || "-")} · 查询原文：${escapeHTML(detail.item.selected_text || "-")}</p>

@@ -15,6 +15,12 @@ type ReviewRepository struct {
 	db *sql.DB
 }
 
+type DailyReviewStats struct {
+	ReviewCount  int
+	CorrectCount int
+	WrongCount   int
+}
+
 func NewReviewRepository(db *sql.DB) *ReviewRepository {
 	return &ReviewRepository{db: db}
 }
@@ -107,6 +113,23 @@ func (r *ReviewRepository) CreateRecord(ctx context.Context, record *model.Vocab
 		return nil, fmt.Errorf("create review record: %w", err)
 	}
 	return record, nil
+}
+
+func (r *ReviewRepository) DailyStats(ctx context.Context, userID, vocabularyID int64) (DailyReviewStats, error) {
+	var stats DailyReviewStats
+	err := r.db.QueryRowContext(ctx, `
+		SELECT COUNT(*)::int,
+		       COUNT(*) FILTER (WHERE is_correct)::int,
+		       COUNT(*) FILTER (WHERE NOT is_correct)::int
+		FROM vocabulary_review_records
+		WHERE user_id = $1
+		  AND user_vocabulary_id = $2
+		  AND reviewed_at::date = CURRENT_DATE
+	`, userID, vocabularyID).Scan(&stats.ReviewCount, &stats.CorrectCount, &stats.WrongCount)
+	if err != nil {
+		return stats, fmt.Errorf("get daily review stats: %w", err)
+	}
+	return stats, nil
 }
 
 func (r *ReviewRepository) ListRecordsByUser(ctx context.Context, userID int64, limit int) ([]model.VocabularyReviewRecordDetail, error) {

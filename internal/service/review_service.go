@@ -177,11 +177,16 @@ func (s *ReviewService) SubmitAnswer(ctx context.Context, userID, userVocabulary
 		SelectedOption:   selectedOption,
 		IsCorrect:        isCorrect,
 	}
+	dailyStats, err := s.reviewRepo.DailyStats(ctx, userID, userVocabularyID)
+	if err != nil {
+		return nil, err
+	}
+
 	if _, err := s.reviewRepo.CreateRecord(ctx, record); err != nil {
 		return nil, err
 	}
 
-	status, familiarity, correctCount, wrongCount, consecutive, nextReviewAt := nextReviewState(detail.Item, isCorrect)
+	status, familiarity, correctCount, wrongCount, consecutive, nextReviewAt := nextReviewState(detail.Item, isCorrect, dailyStats)
 	if err := s.vocabularyRepo.UpdateReviewProgress(
 		ctx,
 		userID,
@@ -207,6 +212,7 @@ func (s *ReviewService) SubmitAnswer(ctx context.Context, userID, userVocabulary
 		"correct_count":             correctCount,
 		"wrong_count":               wrongCount,
 		"consecutive_correct_count": consecutive,
+		"proficiency":               familiarity,
 	}, nil
 }
 
@@ -336,9 +342,9 @@ func (s *ReviewService) storeCachedReviewQuestion(ctx context.Context, taskType,
 	}
 }
 
-func nextReviewState(item model.UserVocabulary, isCorrect bool) (model.VocabularyStatus, int, int, int, int, time.Time) {
+func nextReviewState(item model.UserVocabulary, isCorrect bool, dailyStats repository.DailyReviewStats) (model.VocabularyStatus, int, int, int, int, time.Time) {
 	now := time.Now()
-	familiarity := item.Familiarity
+	familiarity := normalizeProficiency(item.Familiarity)
 	correctCount := item.CorrectCount
 	wrongCount := item.WrongCount
 	consecutive := item.ConsecutiveCorrectCount
@@ -346,28 +352,113 @@ func nextReviewState(item model.UserVocabulary, isCorrect bool) (model.Vocabular
 	if !isCorrect {
 		wrongCount++
 		consecutive = 0
-		if familiarity > 0 {
-			familiarity--
-		}
-		return model.VocabularyLearning, familiarity, correctCount, wrongCount, consecutive, now.Add(10 * time.Minute)
+		return model.VocabularyLearning, familiarity, correctCount, wrongCount, consecutive, now.Add(nextReviewDuration(familiarity, dailyStats.CorrectCount, dailyStats.WrongCount+1))
 	}
 
 	correctCount++
 	consecutive++
-	if familiarity < 5 {
-		familiarity++
-	}
+	correctOrdinal := dailyStats.CorrectCount + 1
+	baseCap := dailyGainCap(familiarity)
+	adjustedCap := adjustedDailyGainCap(baseCap, dailyStats.WrongCount)
+	previousGain := min(theoreticalCorrectGain(dailyStats.CorrectCount), adjustedCap)
+	remainingGain := max(0, adjustedCap-previousGain)
+	gain := min(correctGain(correctOrdinal), remainingGain)
+	familiarity = min(100, familiarity+gain)
 
-	switch {
-	case consecutive >= 5:
-		return model.VocabularyMastered, familiarity, correctCount, wrongCount, consecutive, now.Add(30 * 24 * time.Hour)
-	case consecutive == 4:
-		return model.VocabularyReviewing, familiarity, correctCount, wrongCount, consecutive, now.Add(15 * 24 * time.Hour)
-	case consecutive == 3:
-		return model.VocabularyReviewing, familiarity, correctCount, wrongCount, consecutive, now.Add(7 * 24 * time.Hour)
-	case consecutive == 2:
-		return model.VocabularyLearning, familiarity, correctCount, wrongCount, consecutive, now.Add(3 * 24 * time.Hour)
-	default:
-		return model.VocabularyLearning, familiarity, correctCount, wrongCount, consecutive, now.Add(24 * time.Hour)
+	if familiarity >= 100 {
+		return model.VocabularyMastered, 100, correctCount, wrongCount, consecutive, now.Add(3650 * 24 * time.Hour)
 	}
+	return model.VocabularyLearning, familiarity, correctCount, wrongCount, consecutive, now.Add(nextReviewDuration(familiarity, dailyStats.CorrectCount+1, dailyStats.WrongCount))
+}
+
+func normalizeProficiency(value int) int {
+	if value < 0 {
+		return 0
+	}
+	if value <= 5 {
+		return value * 20
+	}
+	if value > 100 {
+		return 100
+	}
+	return value
+}
+
+func dailyGainCap(proficiency int) int {
+	switch {
+	case proficiency <= 20:
+		return 25
+	case proficiency <= 50:
+		return 20
+	case proficiency <= 80:
+		return 15
+	default:
+		return 10
+	}
+}
+
+func adjustedDailyGainCap(baseCap, wrongToday int) int {
+	rate := 1.0
+	switch {
+	case wrongToday == 1:
+		rate = 0.7
+	case wrongToday == 2:
+		rate = 0.5
+	case wrongToday >= 3:
+		rate = 0.35
+	}
+	return max(5, int(float64(baseCap)*rate+0.5))
+}
+
+func correctGain(correctOrdinal int) int {
+	switch correctOrdinal {
+	case 1:
+		return 8
+	case 2:
+		return 6
+	case 3:
+		return 4
+	default:
+		return 2
+	}
+}
+
+func theoreticalCorrectGain(correctCount int) int {
+	total := 0
+	for i := 1; i <= correctCount; i++ {
+		total += correctGain(i)
+	}
+	return total
+}
+
+func nextReviewDuration(proficiency, correctToday, wrongToday int) time.Duration {
+	baseDays := 1
+	switch {
+	case proficiency <= 20:
+		baseDays = 1
+	case proficiency <= 50:
+		baseDays = 2
+	case proficiency <= 80:
+		baseDays = 4
+	default:
+		baseDays = 7
+	}
+	total := correctToday + wrongToday
+	rate := 1.0
+	if total > 0 {
+		accuracy := float64(correctToday) / float64(total)
+		switch {
+		case accuracy >= 1:
+			rate = 1.3
+		case accuracy >= 0.8:
+			rate = 1.0
+		case accuracy >= 0.5:
+			rate = 0.7
+		default:
+			rate = 0.5
+		}
+	}
+	days := int(float64(baseDays)*rate + 0.5)
+	days = max(1, min(7, days))
+	return time.Duration(days) * 24 * time.Hour
 }

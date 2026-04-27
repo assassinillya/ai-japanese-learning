@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="日读 AI">
+  <defs>
+    <linearGradient id="bg" x1="10" y1="8" x2="54" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6366f1"/>
+      <stop offset="1" stop-color="#60a5fa"/>
+    </linearGradient>
+    <linearGradient id="page" x1="17" y1="17" x2="48" y2="49" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#eef2ff"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#bg)"/>
+  <path d="M16 18c0-2.2 1.8-4 4-4h10c4 0 7.2 1.5 10 4.2 2.8-2.7 6-4.2 10-4.2h2c2.2 0 4 1.8 4 4v32c0 1.1-.9 2-2 2h-5c-3.7 0-6.8 1-9 3-2.2-2-5.3-3-9-3H20c-2.2 0-4-1.8-4-4V18z" fill="url(#page)" opacity=".96"/>
+  <path d="M40 18.2V55" stroke="#c7d2fe" stroke-width="2" stroke-linecap="round"/>
+  <path d="M23 24h12M23 32h12M23 40h12" stroke="#4f46e5" stroke-width="3" stroke-linecap="round"/>
+  <text x="45" y="43" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="800" fill="#1d4ed8">日</text>
+  <path d="M50 12l1.5 3.7 3.8 1.4-3.8 1.5L50 22.3l-1.5-3.7-3.8-1.5 3.8-1.4L50 12z" fill="#facc15"/>
+  <circle cx="14" cy="49" r="2.5" fill="#facc15"/>
+</svg>

@@ -3,7 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>日读 AI v1.6</title>
+    <title>日读 AI v1.7</title>
+    <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
     <link rel="stylesheet" href="/assets/styles.css" />
   </head>
   <body>
@@ -13,7 +14,7 @@
           <div class="logo-mark">日</div>
           <div>
             <h1>日读 AI</h1>
-            <p>Nihongo Flow · v1.6</p>
+            <p>Nihongo Flow · v1.7</p>
           </div>
         </div>
         <nav class="sidebar-nav" aria-label="主导航">
@@ -314,17 +315,16 @@
                     <option value="">全部</option>
                     <option value="new">新词</option>
                     <option value="learning">学习中</option>
-                    <option value="reviewing">复习中</option>
-                    <option value="mastered">熟练</option>
-                    <option value="ignored">忽略</option>
+                    <option value="mastered">熟悉</option>
                   </select>
                 </label>
                 <button class="btn btn-secondary" type="submit">筛选</button>
               </form>
+              <div id="vocabulary-srs-summary" class="srs-summary"></div>
               <div class="batch-toolbar">
                 <label class="check-row"><input type="checkbox" id="vocabulary-select-all" /> 全选当前列表</label>
                 <span id="vocabulary-selected-count" class="meta">已选择 0 个</span>
-                <button class="btn btn-secondary compact" id="batch-master-vocabulary-button" type="button">批量标记熟练</button>
+                <button class="btn btn-secondary compact" id="batch-master-vocabulary-button" type="button">批量标记熟悉</button>
                 <button class="btn btn-ghost compact" id="batch-learning-vocabulary-button" type="button">批量标记学习中</button>
                 <button class="btn btn-danger compact" id="batch-delete-vocabulary-button" type="button">批量删除</button>
               </div>
@@ -335,9 +335,7 @@
               <div class="detail-actions">
                 <button class="btn btn-secondary" data-vocabulary-status="new">新词</button>
                 <button class="btn btn-secondary" data-vocabulary-status="learning">学习中</button>
-                <button class="btn btn-secondary" data-vocabulary-status="reviewing">复习中</button>
-                <button class="btn btn-secondary" data-vocabulary-status="mastered">已掌握</button>
-                <button class="btn btn-ghost" data-vocabulary-status="ignored">忽略</button>
+                <button class="btn btn-secondary" data-vocabulary-status="mastered">熟悉</button>
                 <button id="open-vocabulary-article-button" class="btn btn-ghost">打开来源</button>
                 <button id="delete-vocabulary-button" class="btn btn-danger">删除</button>
               </div>
@@ -441,6 +439,10 @@
         <section class="toast" id="message-panel" aria-live="polite">
           <pre id="message-box">等待操作</pre>
         </section>
+        <footer class="site-footer">
+          <a href="https://github.com/assassinillya/ai-japanese-learning" target="_blank" rel="noopener noreferrer">GitHub</a>
+          <span>有问题或建议欢迎提交 Issues。</span>
+        </footer>
       </main>
     </div>
 

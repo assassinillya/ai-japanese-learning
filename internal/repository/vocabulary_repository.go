@@ -87,11 +87,15 @@ func (r *VocabularyRepository) ListByUser(ctx context.Context, userID int64, sta
 	args := []any{userID}
 	nextArg := 2
 	if strings.TrimSpace(status) != "" {
-		query += fmt.Sprintf(` AND uv.status = $%d`, nextArg)
-		args = append(args, status)
-		nextArg++
-	} else {
-		query += ` AND uv.status <> 'mastered'`
+		if status == string(model.VocabularyLearning) {
+			query += fmt.Sprintf(` AND uv.status IN ($%d, $%d)`, nextArg, nextArg+1)
+			args = append(args, status, string(model.VocabularyReviewing))
+			nextArg += 2
+		} else {
+			query += fmt.Sprintf(` AND uv.status = $%d`, nextArg)
+			args = append(args, status)
+			nextArg++
+		}
 	}
 	if strings.TrimSpace(search) != "" {
 		query += fmt.Sprintf(` AND (
@@ -159,7 +163,12 @@ func (r *VocabularyRepository) ListDueForReview(ctx context.Context, userID int6
 		WHERE uv.user_id = $1
 		  AND uv.status NOT IN ('ignored', 'mastered')
 		  AND uv.next_review_at <= NOW()
-		ORDER BY uv.next_review_at ASC, uv.added_at ASC
+		ORDER BY
+		  CASE WHEN uv.status = 'new' THEN 1 ELSE 0 END ASC,
+		  EXTRACT(EPOCH FROM (NOW() - uv.next_review_at)) / 86400 * 10
+		    + uv.wrong_count * 8
+		    + (100 - uv.familiarity) * 0.5 DESC,
+		  uv.added_at DESC
 		LIMIT $2
 	`, userID, limit)
 	if err != nil {
@@ -182,6 +191,17 @@ func (r *VocabularyRepository) UpdateStatus(ctx context.Context, userID, vocabul
 	result, err := r.db.ExecContext(ctx, `
 		UPDATE user_vocabulary
 		SET status = $3,
+		    familiarity = CASE
+		        WHEN $3 = 'mastered' THEN 100
+		        WHEN $3 = 'new' THEN 0
+		        WHEN $3 = 'learning' AND familiarity >= 100 THEN 70
+		        ELSE familiarity
+		    END,
+		    next_review_at = CASE
+		        WHEN $3 = 'mastered' THEN NOW() + INTERVAL '3650 days'
+		        WHEN $3 IN ('new', 'learning') THEN NOW()
+		        ELSE next_review_at
+		    END,
 		    updated_at = NOW()
 		WHERE user_id = $1 AND id = $2
 	`, userID, vocabularyID, status)
@@ -211,6 +231,17 @@ func (r *VocabularyRepository) UpdateStatusBatch(ctx context.Context, userID int
 	result, err := r.db.ExecContext(ctx, `
 		UPDATE user_vocabulary
 		SET status = $2,
+		    familiarity = CASE
+		        WHEN $2 = 'mastered' THEN 100
+		        WHEN $2 = 'new' THEN 0
+		        WHEN $2 = 'learning' AND familiarity >= 100 THEN 70
+		        ELSE familiarity
+		    END,
+		    next_review_at = CASE
+		        WHEN $2 = 'mastered' THEN NOW() + INTERVAL '3650 days'
+		        WHEN $2 IN ('new', 'learning') THEN NOW()
+		        ELSE next_review_at
+		    END,
 		    updated_at = NOW()
 		WHERE user_id = $1 AND id IN (`+strings.Join(placeholders, ",")+`)
 	`, args...)
