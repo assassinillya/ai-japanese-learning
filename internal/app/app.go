@@ -33,6 +33,10 @@ func New(cfg *config.Config) (*App, error) {
 	vocabularyRepo := repository.NewVocabularyRepository(postgres)
 	challengeRepo := repository.NewChallengeRepository(postgres)
 	reviewRepo := repository.NewReviewRepository(postgres)
+	if err := reviewRepo.EnsureReviewQuestionSchema(context.Background()); err != nil {
+		_ = postgres.Close()
+		return nil, err
+	}
 	aiRepo := repository.NewAIRepository(postgres)
 	userAIConfigRepo := repository.NewUserAIConfigRepository(postgres)
 	if err := userAIConfigRepo.EnsureTable(context.Background()); err != nil {
@@ -72,6 +76,8 @@ func New(cfg *config.Config) (*App, error) {
 		userAIConfigRepo,
 		web.NewStaticServer(),
 	)
+
+	reviewService.PrewarmMissingQuestionsAsync(context.Background())
 
 	return &App{
 		db:     postgres,

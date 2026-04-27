@@ -189,6 +189,7 @@ type ReadingAnswerDetail struct {
 type VocabularyReviewQuestion struct {
 	ID                int64     `json:"id"`
 	DictionaryEntryID int64     `json:"dictionary_entry_id"`
+	QuestionOrder     int       `json:"question_order"`
 	QuestionText      string    `json:"question_text"`
 	CorrectAnswer     string    `json:"correct_answer"`
 	OptionA           string    `json:"option_a"`
@@ -203,11 +204,15 @@ type VocabularyReviewQuestion struct {
 }
 
 type VocabularyReviewItem struct {
-	UserVocabulary  UserVocabulary           `json:"user_vocabulary"`
-	Dictionary      DictionaryEntry          `json:"dictionary_entry"`
-	Question        VocabularyReviewQuestion `json:"question"`
-	ArticleTitle    *string                  `json:"article_title,omitempty"`
-	ContextSentence string                   `json:"context_sentence"`
+	UserVocabulary    UserVocabulary           `json:"user_vocabulary"`
+	Dictionary        DictionaryEntry          `json:"dictionary_entry"`
+	Question          VocabularyReviewQuestion `json:"question"`
+	ArticleTitle      *string                  `json:"article_title,omitempty"`
+	ContextSentence   string                   `json:"context_sentence"`
+	TodayReviewCount  int                      `json:"today_review_count"`
+	TodayCorrectCount int                      `json:"today_correct_count"`
+	TodayWrongCount   int                      `json:"today_wrong_count"`
+	TodayProgressGain int                      `json:"today_progress_gain"`
 }
 
 type VocabularyReviewRecord struct {
@@ -217,6 +222,7 @@ type VocabularyReviewRecord struct {
 	ReviewQuestionID int64     `json:"review_question_id"`
 	SelectedOption   string    `json:"selected_option"`
 	IsCorrect        bool      `json:"is_correct"`
+	FamiliarityDelta int       `json:"familiarity_delta"`
 	ReviewedAt       time.Time `json:"reviewed_at"`
 }
 

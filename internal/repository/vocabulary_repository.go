@@ -149,6 +149,79 @@ func (r *VocabularyRepository) GetDetail(ctx context.Context, userID, vocabulary
 }
 
 func (r *VocabularyRepository) ListDueForReview(ctx context.Context, userID int64, limit int) ([]model.VocabularyDetail, error) {
+	return r.listReviewCandidates(ctx, userID, limit, false)
+}
+
+func (r *VocabularyRepository) ListExtraForReview(ctx context.Context, userID int64, limit int) ([]model.VocabularyDetail, error) {
+	return r.listReviewCandidates(ctx, userID, limit, true)
+}
+
+func (r *VocabularyRepository) ListDictionaryEntriesMissingReviewQuestions(ctx context.Context, expectedCount int) ([]model.DictionaryEntry, error) {
+	if expectedCount <= 0 {
+		expectedCount = 3
+	}
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT de.id, de.surface, de.lemma, de.reading, de.romaji, de.part_of_speech, de.meaning_zh, de.meaning_ja, de.meaning_en,
+		       de.primary_meaning_zh, de.jlpt_level, de.example_sentence, de.example_translation_zh, de.conjugation_type,
+		       de.is_common, de.source, de.verified, de.confidence_score::text, de.ai_model, de.prompt_version, de.created_at, de.updated_at
+		FROM dictionary_entries de
+		WHERE EXISTS (
+		    SELECT 1
+		    FROM user_vocabulary uv
+		    WHERE uv.dictionary_entry_id = de.id
+		      AND uv.status <> 'ignored'
+		)
+		  AND (
+		      SELECT COUNT(*)::int
+		      FROM vocabulary_review_questions rq
+		      WHERE rq.dictionary_entry_id = de.id
+		  ) < $1
+		ORDER BY de.created_at ASC
+	`, expectedCount)
+	if err != nil {
+		return nil, fmt.Errorf("list dictionary entries missing review questions: %w", err)
+	}
+	defer rows.Close()
+
+	var entries []model.DictionaryEntry
+	for rows.Next() {
+		var entry model.DictionaryEntry
+		if err := rows.Scan(
+			&entry.ID,
+			&entry.Surface,
+			&entry.Lemma,
+			&entry.Reading,
+			&entry.Romaji,
+			&entry.PartOfSpeech,
+			&entry.MeaningZH,
+			&entry.MeaningJA,
+			&entry.MeaningEN,
+			&entry.PrimaryMeaningZH,
+			&entry.JLPTLevel,
+			&entry.ExampleSentence,
+			&entry.ExampleTranslationZH,
+			&entry.ConjugationType,
+			&entry.IsCommon,
+			&entry.Source,
+			&entry.Verified,
+			&entry.ConfidenceScore,
+			&entry.AIModel,
+			&entry.PromptVersion,
+			&entry.CreatedAt,
+			&entry.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan dictionary entry missing review questions: %w", err)
+		}
+		entries = append(entries, entry)
+	}
+	return entries, rows.Err()
+}
+
+func (r *VocabularyRepository) listReviewCandidates(ctx context.Context, userID int64, limit int, includeFuture bool) ([]model.VocabularyDetail, error) {
+	dueClause := "AND uv.next_review_at <= NOW()"
+	if includeFuture {
+		dueClause = ""
+	}
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT uv.id, uv.user_id, uv.dictionary_entry_id, uv.article_id, uv.source_sentence_id, uv.selected_text, uv.source_sentence_text,
 		       uv.status, uv.familiarity, uv.correct_count, uv.wrong_count, uv.consecutive_correct_count, uv.added_at,
@@ -162,10 +235,10 @@ func (r *VocabularyRepository) ListDueForReview(ctx context.Context, userID int6
 		LEFT JOIN articles a ON a.id = uv.article_id
 		WHERE uv.user_id = $1
 		  AND uv.status NOT IN ('ignored', 'mastered')
-		  AND uv.next_review_at <= NOW()
+		  `+dueClause+`
 		ORDER BY
 		  CASE WHEN uv.status = 'new' THEN 1 ELSE 0 END ASC,
-		  EXTRACT(EPOCH FROM (NOW() - uv.next_review_at)) / 86400 * 10
+		  GREATEST(EXTRACT(EPOCH FROM (NOW() - uv.next_review_at)) / 86400, 0) * 10
 		    + uv.wrong_count * 8
 		    + (100 - uv.familiarity) * 0.5 DESC,
 		  uv.added_at DESC

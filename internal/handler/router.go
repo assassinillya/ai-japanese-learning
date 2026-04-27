@@ -104,6 +104,7 @@ func NewRouter(
 	r.mux.HandleFunc("PUT /api/vocabulary/{id}/status", r.withAuth(r.handleUpdateVocabularyStatus))
 	r.mux.HandleFunc("DELETE /api/vocabulary/{id}", r.withAuth(r.handleDeleteVocabulary))
 	r.mux.HandleFunc("GET /api/review/due", r.withAuth(r.handleReviewDue))
+	r.mux.HandleFunc("GET /api/review/question", r.withAuth(r.handleReviewQuestion))
 	r.mux.HandleFunc("POST /api/review/questions", r.withAuth(r.handleReviewQuestions))
 	r.mux.HandleFunc("POST /api/review/prewarm", r.withAuth(r.handleReviewPrewarm))
 	r.mux.HandleFunc("POST /api/review/answer", r.withAuth(r.handleReviewAnswer))
@@ -121,7 +122,7 @@ func NewRouter(
 func (r *Router) handleHealth(w http.ResponseWriter, req *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{
 		"status":  "ok",
-		"version": "v1.4",
+		"version": "v1.8",
 	})
 }
 

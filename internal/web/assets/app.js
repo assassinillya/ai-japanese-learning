@@ -30,6 +30,10 @@ const state = {
     currentIndex: 0,
     selectedOption: "",
     answered: false,
+    baseItems: [],
+    completedCount: 0,
+    correctCount: 0,
+    wrongCount: 0,
   },
   lookup: {
     timer: null,
@@ -88,6 +92,9 @@ const postQuizOptions = document.getElementById("post-quiz-options");
 const postQuizFeedback = document.getElementById("post-quiz-feedback");
 const reviewHeader = document.getElementById("review-header");
 const reviewCard = document.getElementById("review-card");
+const reviewCompletePanel = document.getElementById("review-complete-panel");
+const reviewCompleteSummary = document.getElementById("review-complete-summary");
+const extraReviewForm = document.getElementById("extra-review-form");
 const reviewProgress = document.getElementById("review-progress");
 const reviewQuestion = document.getElementById("review-question");
 const reviewContext = document.getElementById("review-context");
@@ -824,17 +831,50 @@ async function submitCurrentReviewAnswer() {
   }
 
   state.review.answered = true;
+  state.review.completedCount += 1;
+  if (result.data.is_correct) {
+    state.review.correctCount += 1;
+  } else {
+    state.review.wrongCount += 1;
+    insertExtraWrongReview(item);
+  }
   reviewFeedback.classList.remove("hidden");
+  const progressNote = result.data.is_correct
+    ? Number(result.data.familiarity_delta || 0) > 0
+      ? `熟练度 +${result.data.familiarity_delta}%`
+      : "这个词今天熟练度涨幅已到 40%，继续学习不会再增加熟练度。"
+    : "";
   reviewFeedback.textContent = [
     result.data.is_correct ? "回答正确" : "回答错误",
     `正确选项：${result.data.correct_option}`,
     `正确答案：${result.data.correct_answer}`,
+    progressNote,
     `当前状态：${vocabularyStatusLabel(result.data.status)} · 熟练度 ${result.data.proficiency ?? result.data.familiarity ?? 0}%`,
     `下次复习：${result.data.status === "mastered" ? "已熟悉，不再进入每日复习" : formatDateTime(result.data.next_review_at)}`,
     `解析：${result.data.explanation}`,
   ].join("\n");
   await loadVocabularyList();
   renderReviewQuestion();
+}
+
+function insertExtraWrongReview(item) {
+  const sameWordPending = state.review.items
+    .slice(state.review.currentIndex + 1)
+    .filter((candidate) => candidate.user_vocabulary.id === item.user_vocabulary.id).length;
+  const targetTotal = Math.min(4, Math.max(Number(item.planned_rounds || 1), sameWordPending + 2));
+  const currentTotal = sameWordPending + 1;
+  if (currentTotal >= targetTotal) {
+    return;
+  }
+  const nextRound = currentTotal + 1;
+  const insertAt = Math.min(state.review.items.length, state.review.currentIndex + 6 + sameWordPending * 6);
+  state.review.items.splice(insertAt, 0, {
+    ...item,
+    review_round: nextRound,
+    planned_rounds: targetTotal,
+    question_loaded_for_turn: false,
+    question_refreshing: false,
+  });
 }
 
 nextReviewQuestionButton.addEventListener("click", () => {
@@ -867,7 +907,7 @@ masterReviewWordButton?.addEventListener("click", async () => {
   setMessage("已标记熟悉，后续复习会跳过这个词");
   if (state.review.items.length === 0) {
     reviewHeader.textContent = "今日复习完成，熟悉词已移出复习队列。";
-    reviewCard.classList.add("hidden");
+    showReviewCompletePanel();
     return;
   }
   renderReviewQuestion();
@@ -879,6 +919,12 @@ loadPostQuizResultsButton.addEventListener("click", async () => {
 
 loadReviewRecordsButton.addEventListener("click", async () => {
   await loadReviewRecords();
+});
+
+extraReviewForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const limit = Number(new FormData(event.currentTarget).get("limit") || 10);
+  await loadReviewDue(Number.isFinite(limit) ? Math.max(1, Math.min(50, limit)) : 10, true);
 });
 
 readingContent.addEventListener("mouseup", () => {
@@ -1866,30 +1912,79 @@ function renderPostQuizQuestion() {
   nextPostQuizQuestionButton.disabled = !state.postQuiz.answered;
 }
 
-async function loadReviewDue() {
-  reviewHeader.textContent = "正在加载今日待复习生词...";
+async function loadReviewDue(limit = 20, extra = false) {
+  reviewHeader.textContent = extra ? "正在加载追加学习生词..." : "正在加载今日待复习生词...";
   reviewCard.classList.add("hidden");
-  const result = await request("/api/review/due", { timeoutMs: 60000 });
+  reviewCompletePanel?.classList.add("hidden");
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (extra) {
+    params.set("extra", "1");
+  }
+  const result = await request(`/api/review/due?${params.toString()}`, { timeoutMs: 60000 });
   if (!result.ok) {
     return;
   }
 
-  state.review.items = result.data.items || [];
+  state.review.baseItems = result.data.items || [];
+  state.review.items = buildDailyReviewQueue(state.review.baseItems);
   state.review.currentIndex = 0;
   state.review.selectedOption = "";
   state.review.answered = false;
+  state.review.completedCount = 0;
+  state.review.correctCount = 0;
+  state.review.wrongCount = 0;
 
   if (state.review.items.length === 0) {
-    reviewHeader.textContent = "当前没有到期需要复习的生词。";
+    const emptyMessage = extra ? "当前没有更多可追加学习的生词。" : "当前没有到期需要复习的生词。";
+    reviewHeader.textContent = emptyMessage;
     reviewCard.classList.add("hidden");
+    showReviewCompletePanel(emptyMessage);
     return;
   }
 
-  reviewHeader.textContent = `今日待复习：${state.review.items.length} 个`;
+  reviewHeader.textContent = `${extra ? "追加学习" : "今日任务"}：${state.review.baseItems.length} 个词 · ${state.review.items.length} 轮`;
+  const allProgressCapped = state.review.baseItems.every((item) => Number(item.today_progress_gain || 0) >= 40);
+  if (extra && allProgressCapped) {
+    setMessage("这些词今天熟练度涨幅都已达到 40%，继续学习会保留练习记录，但不会再增加熟练度。");
+  }
   reviewCard.classList.remove("hidden");
   reviewFeedback.classList.add("hidden");
   reviewFeedback.textContent = "";
   renderReviewQuestion();
+}
+
+function buildDailyReviewQueue(items) {
+  const firstRound = [];
+  const laterRounds = [];
+  items.forEach((item) => {
+    const rounds = plannedReviewRounds(item);
+    firstRound.push({ ...item, review_round: 1, planned_rounds: rounds, question_loaded_for_turn: false });
+    for (let round = 2; round <= rounds; round += 1) {
+      laterRounds.push({ ...item, review_round: round, planned_rounds: rounds, question_loaded_for_turn: false });
+    }
+  });
+  return interleaveReviewRounds(firstRound, laterRounds);
+}
+
+function plannedReviewRounds(item) {
+  const status = visibleVocabularyStatus(item.user_vocabulary.status);
+  const wrongToday = Number(item.today_wrong_count || 0);
+  const consecutive = Number(item.user_vocabulary.consecutive_correct_count || 0);
+  if (status === "new") return 3;
+  if (wrongToday > 0) return 4;
+  if (consecutive >= 3) return 1;
+  if (consecutive >= 1) return 2;
+  return 2;
+}
+
+function interleaveReviewRounds(firstRound, laterRounds) {
+  const queue = [...firstRound];
+  laterRounds.forEach((item, index) => {
+    const offset = item.review_round === 2 ? 5 : item.review_round === 3 ? 15 : 25;
+    const position = Math.min(queue.length, index + offset);
+    queue.splice(position, 0, item);
+  });
+  return queue;
 }
 
 function renderReviewQuestion() {
@@ -1898,9 +1993,10 @@ function renderReviewQuestion() {
     reviewCard.classList.add("hidden");
     return;
   }
+  refreshReviewQuestionForTurn(item);
 
   const question = item.question;
-  reviewProgress.textContent = `第 ${state.review.currentIndex + 1} / ${state.review.items.length} 题`;
+  reviewProgress.textContent = `第 ${state.review.currentIndex + 1} / ${state.review.items.length} 轮 · ${escapeHTML(item.dictionary.surface)} 第 ${item.review_round || 1} 轮`;
   reviewQuestion.textContent = question.question_text;
   reviewContext.textContent = item.context_sentence ? `上下文：${item.context_sentence}` : "";
 
@@ -1941,9 +2037,26 @@ function renderReviewQuestion() {
   masterReviewWordButton.disabled = false;
 }
 
+async function refreshReviewQuestionForTurn(item) {
+  if (!item || item.question_loaded_for_turn || item.question_refreshing || state.review.answered) {
+    return;
+  }
+  item.question_refreshing = true;
+  const result = await request(`/api/review/question?dictionary_entry_id=${encodeURIComponent(item.dictionary_entry.id)}`, { timeoutMs: 60000 });
+  item.question_refreshing = false;
+  item.question_loaded_for_turn = true;
+  if (!result.ok || !result.data.question) {
+    return;
+  }
+  item.question = result.data.question;
+  if (state.review.items[state.review.currentIndex] === item && !state.review.answered) {
+    renderReviewQuestion();
+  }
+}
+
 function moveToNextReviewQuestion() {
   if (state.review.currentIndex + 1 >= state.review.items.length) {
-    setMessage("词汇复习已完成");
+    showReviewCompletePanel();
     return;
   }
   state.review.currentIndex += 1;
@@ -1952,6 +2065,21 @@ function moveToNextReviewQuestion() {
   reviewFeedback.classList.add("hidden");
   reviewFeedback.textContent = "";
   renderReviewQuestion();
+}
+
+function showReviewCompletePanel(emptyMessage = "当前没有到期任务，可以输入数量继续学习更多词。") {
+  reviewCard.classList.add("hidden");
+  reviewCompletePanel?.classList.remove("hidden");
+  const total = state.review.completedCount || 0;
+  const correct = state.review.correctCount || 0;
+  const wrong = state.review.wrongCount || 0;
+  const rate = total ? Math.round((correct / total) * 100) : 0;
+  reviewHeader.textContent = "今日任务已完成";
+  if (reviewCompleteSummary) {
+    reviewCompleteSummary.textContent = total
+      ? `本次完成 ${total} 轮，答对 ${correct} 轮，答错 ${wrong} 轮，正确率 ${rate}%。`
+      : emptyMessage;
+  }
 }
 
 async function batchUpdateVocabularyStatus(status, label) {

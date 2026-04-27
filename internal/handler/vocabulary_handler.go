@@ -89,7 +89,7 @@ func (r *Router) handleCreateVocabulary(w http.ResponseWriter, req *http.Request
 			if err != nil {
 				return
 			}
-			_, _ = r.reviewService.GetOrCreateQuestion(ctx, *entry)
+			_, _ = r.reviewService.EnsureQuestionsForEntry(ctx, *entry)
 		}(service.BackgroundContextWithAIProvider(req.Context()), input.DictionaryEntryID)
 	}
 }

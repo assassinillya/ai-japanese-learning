@@ -26,7 +26,13 @@ func (r *Router) handleReviewDue(w http.ResponseWriter, req *http.Request) {
 			limit = parsed
 		}
 	}
-	items, err := r.reviewService.Due(req.Context(), user.ID, limit)
+	extra := req.URL.Query().Get("extra") == "1" || req.URL.Query().Get("extra") == "true"
+	var items any
+	if extra {
+		items, err = r.reviewService.Extra(req.Context(), user.ID, limit)
+	} else {
+		items, err = r.reviewService.Due(req.Context(), user.ID, limit)
+	}
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
@@ -36,6 +42,30 @@ func (r *Router) handleReviewDue(w http.ResponseWriter, req *http.Request) {
 
 func (r *Router) handleReviewQuestions(w http.ResponseWriter, req *http.Request) {
 	r.handleReviewDue(w, req)
+}
+
+func (r *Router) handleReviewQuestion(w http.ResponseWriter, req *http.Request) {
+	user, err := currentUser(req.Context())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	entryID, err := strconv.ParseInt(req.URL.Query().Get("dictionary_entry_id"), 10, 64)
+	if err != nil || entryID <= 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid dictionary_entry_id"})
+		return
+	}
+	entry, err := r.dictionaryService.GetByID(req.Context(), entryID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+	question, err := r.reviewService.NextQuestion(req.Context(), user.ID, *entry)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"question": question})
 }
 
 func (r *Router) handleReviewPrewarm(w http.ResponseWriter, req *http.Request) {

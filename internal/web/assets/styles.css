@@ -881,6 +881,20 @@ label {
   box-shadow: var(--shadow-card);
 }
 
+.review-complete-panel {
+  width: min(760px, 100%);
+  margin: 0 auto 18px;
+  padding: 26px;
+  border: 1px solid rgba(99, 102, 241, 0.16);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: var(--shadow-card);
+}
+
+.compact-input {
+  max-width: 110px;
+}
+
 .review-word {
   margin: 18px 0 6px;
   font-size: 52px;

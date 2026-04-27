@@ -349,6 +349,14 @@
             <span class="badge badge-jlpt" data-user-jlpt>N5</span>
             <button class="btn btn-ghost compact" data-view="vocabulary">生词本</button>
           </div>
+          <div id="review-complete-panel" class="review-complete-panel hidden">
+            <h3>今日任务已完成</h3>
+            <p class="meta" id="review-complete-summary">可以继续加练，或回到文章阅读。</p>
+            <form id="extra-review-form" class="inline-form">
+              <label>再学习数量 <input class="input compact-input" name="limit" type="number" min="1" max="50" value="10" /></label>
+              <button class="btn btn-secondary" type="submit">今天再多学习</button>
+            </form>
+          </div>
           <div id="review-card" class="review-card hidden">
             <div id="review-progress" class="progress-label">第 0 / 0 题</div>
             <p id="review-question" class="review-word">题目加载中。</p>

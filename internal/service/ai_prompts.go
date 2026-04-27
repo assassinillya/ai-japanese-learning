@@ -181,11 +181,15 @@ func promptPostQuizQuestions(request challengeQuestionCacheRequest) AIPrompt {
 	}
 }
 
-func promptReviewQuestion(entry model.DictionaryEntry) AIPrompt {
+func promptReviewQuestion(entry model.DictionaryEntry, questionOrder int) AIPrompt {
 	raw, _ := json.Marshal(entry)
 	return AIPrompt{
 		System: "你是日语词汇复习题生成器。只返回合法 JSON，不要 Markdown。正确答案必须等于词典 primary_meaning_zh。",
-		User: fmt.Sprintf(`请为这个词典条目生成中文释义四选一复习题。
+		User: fmt.Sprintf(`请为这个词典条目生成第 %d 道中文释义四选一复习题。
+
+要求：
+- 同一个词会生成 3 道题，请让第 %d 道题的题干表达和干扰项角度与其他题不同。
+- 题型仍然是识别目标词的中文释义，不要改变正确答案。
 
 词典条目 JSON：
 %s
@@ -200,6 +204,6 @@ func promptReviewQuestion(entry model.DictionaryEntry) AIPrompt {
   "option_d": "选项D",
   "correct_option": "A",
   "explanation_zh": "中文解析"
-}`, string(raw)),
+}`, questionOrder, questionOrder, string(raw)),
 	}
 }

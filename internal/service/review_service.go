@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math/rand"
 	"slices"
 	"strings"
@@ -35,26 +36,48 @@ func NewReviewService(
 }
 
 func (s *ReviewService) Due(ctx context.Context, userID int64, limit int) ([]model.VocabularyReviewItem, error) {
+	return s.reviewItems(ctx, userID, limit, false)
+}
+
+func (s *ReviewService) Extra(ctx context.Context, userID int64, limit int) ([]model.VocabularyReviewItem, error) {
+	return s.reviewItems(ctx, userID, limit, true)
+}
+
+func (s *ReviewService) reviewItems(ctx context.Context, userID int64, limit int, includeFuture bool) ([]model.VocabularyReviewItem, error) {
 	if limit <= 0 || limit > 50 {
 		limit = 20
 	}
-	dueItems, err := s.vocabularyRepo.ListDueForReview(ctx, userID, limit)
+	var dueItems []model.VocabularyDetail
+	var err error
+	if includeFuture {
+		dueItems, err = s.vocabularyRepo.ListExtraForReview(ctx, userID, limit)
+	} else {
+		dueItems, err = s.vocabularyRepo.ListDueForReview(ctx, userID, limit)
+	}
 	if err != nil {
 		return nil, err
 	}
 
 	items := make([]model.VocabularyReviewItem, 0, len(dueItems))
 	for _, detail := range dueItems {
-		question, err := s.GetOrCreateQuestion(ctx, detail.DictionaryEntry)
+		question, err := s.NextQuestion(ctx, userID, detail.DictionaryEntry)
+		if err != nil {
+			return nil, err
+		}
+		dailyStats, err := s.reviewRepo.DailyStats(ctx, userID, detail.Item.ID)
 		if err != nil {
 			return nil, err
 		}
 		items = append(items, model.VocabularyReviewItem{
-			UserVocabulary:  detail.Item,
-			Dictionary:      detail.DictionaryEntry,
-			Question:        *question,
-			ArticleTitle:    detail.ArticleTitle,
-			ContextSentence: detail.ExampleSentence,
+			UserVocabulary:    detail.Item,
+			Dictionary:        detail.DictionaryEntry,
+			Question:          *question,
+			ArticleTitle:      detail.ArticleTitle,
+			ContextSentence:   detail.ExampleSentence,
+			TodayReviewCount:  dailyStats.ReviewCount,
+			TodayCorrectCount: dailyStats.CorrectCount,
+			TodayWrongCount:   dailyStats.WrongCount,
+			TodayProgressGain: dailyStats.FamiliarityGain,
 		})
 	}
 	return items, nil
@@ -70,25 +93,94 @@ func (s *ReviewService) EnsureQuestionsForUser(ctx context.Context, userID int64
 		if detail.Item.Status == model.VocabularyIgnored || detail.Item.Status == model.VocabularyMastered {
 			continue
 		}
-		if _, err := s.reviewRepo.GetQuestionByDictionaryEntry(ctx, detail.DictionaryEntry.ID); err == nil {
+		count, err := s.reviewRepo.CountQuestionsByDictionaryEntry(ctx, detail.DictionaryEntry.ID)
+		if err == nil && count >= 3 {
 			continue
-		} else if err != repository.ErrReviewQuestionNotFound {
+		} else if err != nil {
 			return created, err
 		}
-		if _, err := s.GetOrCreateQuestion(ctx, detail.DictionaryEntry); err != nil {
+		if _, err := s.EnsureQuestionsForEntry(ctx, detail.DictionaryEntry); err != nil {
 			return created, err
 		}
-		created++
+		created += max(0, 3-count)
 	}
 	return created, nil
 }
 
+func (s *ReviewService) EnsureQuestionsForAllVocabulary(ctx context.Context) (int, error) {
+	entries, err := s.vocabularyRepo.ListDictionaryEntriesMissingReviewQuestions(ctx, 3)
+	if err != nil {
+		return 0, err
+	}
+	created := 0
+	for _, entry := range entries {
+		before, err := s.reviewRepo.CountQuestionsByDictionaryEntry(ctx, entry.ID)
+		if err != nil {
+			return created, err
+		}
+		if _, err := s.EnsureQuestionsForEntry(ctx, entry); err != nil {
+			return created, err
+		}
+		after, err := s.reviewRepo.CountQuestionsByDictionaryEntry(ctx, entry.ID)
+		if err != nil {
+			return created, err
+		}
+		created += max(0, after-before)
+	}
+	return created, nil
+}
+
+func (s *ReviewService) PrewarmMissingQuestionsAsync(ctx context.Context) {
+	go func() {
+		created, err := s.EnsureQuestionsForAllVocabulary(ctx)
+		if err != nil {
+			log.Printf("prewarm vocabulary review questions failed: %v", err)
+			return
+		}
+		if created > 0 {
+			log.Printf("prewarmed %d vocabulary review questions", created)
+		}
+	}()
+}
+
+func (s *ReviewService) NextQuestion(ctx context.Context, userID int64, entry model.DictionaryEntry) (*model.VocabularyReviewQuestion, error) {
+	if count, err := s.reviewRepo.CountQuestionsByDictionaryEntry(ctx, entry.ID); err == nil && count < 3 {
+		go func() {
+			_, _ = s.EnsureQuestionsForEntry(context.Background(), entry)
+		}()
+	}
+	question, err := s.reviewRepo.NextQuestionForUser(ctx, userID, entry.ID)
+	if err == nil {
+		return question, nil
+	}
+	if err != repository.ErrReviewQuestionNotFound {
+		return nil, err
+	}
+	return s.GetOrCreateQuestion(ctx, entry)
+}
+
 func (s *ReviewService) GetOrCreateQuestion(ctx context.Context, entry model.DictionaryEntry) (*model.VocabularyReviewQuestion, error) {
-	existing, err := s.reviewRepo.GetQuestionByDictionaryEntry(ctx, entry.ID)
+	return s.getOrCreateQuestion(ctx, entry, 1)
+}
+
+func (s *ReviewService) EnsureQuestionsForEntry(ctx context.Context, entry model.DictionaryEntry) ([]model.VocabularyReviewQuestion, error) {
+	questions := make([]model.VocabularyReviewQuestion, 0, 3)
+	for order := 1; order <= 3; order++ {
+		question, err := s.getOrCreateQuestion(ctx, entry, order)
+		if err != nil {
+			return nil, err
+		}
+		questions = append(questions, *question)
+	}
+	return questions, nil
+}
+
+func (s *ReviewService) getOrCreateQuestion(ctx context.Context, entry model.DictionaryEntry, order int) (*model.VocabularyReviewQuestion, error) {
+	existing, err := s.reviewRepo.GetQuestionByDictionaryEntryAndOrder(ctx, entry.ID, order)
 	if err == nil {
 		return existing, nil
 	}
-	if err != repository.ErrReviewQuestionNotFound {
+	if err != nil && err != repository.ErrReviewQuestionNotFound {
 		return nil, err
 	}
 
@@ -99,9 +191,10 @@ func (s *ReviewService) GetOrCreateQuestion(ctx context.Context, entry model.Dic
 	}
 	promptVersion := aiPromptVersionV12
 	taskType := "vocabulary_review_question"
-	prompt := promptReviewQuestion(entry)
+	prompt := promptReviewQuestion(entry, order)
 	request := reviewQuestionCacheRequest{
 		DictionaryEntryID: entry.ID,
+		QuestionOrder:     order,
 		Surface:           entry.Surface,
 		PrimaryMeaningZH:  entry.PrimaryMeaningZH,
 		MeaningZH:         entry.MeaningZH,
@@ -112,6 +205,7 @@ func (s *ReviewService) GetOrCreateQuestion(ctx context.Context, entry model.Dic
 	cacheKey, inputHash := s.reviewQuestionCacheKey(request, taskType, aiModel, promptVersion)
 	if cached, ok := s.getCachedReviewQuestion(ctx, cacheKey); ok {
 		cached.DictionaryEntryID = entry.ID
+		cached.QuestionOrder = order
 		cached.ID = 0
 		cached.CreatedAt = time.Time{}
 		return s.reviewRepo.CreateQuestion(ctx, cached)
@@ -128,6 +222,7 @@ func (s *ReviewService) GetOrCreateQuestion(ctx context.Context, entry model.Dic
 		}
 		question = &model.VocabularyReviewQuestion{
 			DictionaryEntryID: entry.ID,
+			QuestionOrder:     order,
 			QuestionText:      entry.Surface,
 			CorrectAnswer:     meaningForReview(entry),
 			OptionA:           options[0],
@@ -138,6 +233,7 @@ func (s *ReviewService) GetOrCreateQuestion(ctx context.Context, entry model.Dic
 			ExplanationZH:     fmt.Sprintf("「%s」的主要中文意思是：%s。", entry.Surface, meaningForReview(entry)),
 		}
 	}
+	question.QuestionOrder = order
 	question.AIModel = &aiModel
 	question.PromptVersion = &promptVersion
 	s.storeCachedReviewQuestion(ctx, taskType, inputHash, cacheKey, request, question, aiModel, promptVersion)
@@ -170,23 +266,24 @@ func (s *ReviewService) SubmitAnswer(ctx context.Context, userID, userVocabulary
 	}
 
 	isCorrect := question.CorrectOption == selectedOption
+	dailyStats, err := s.reviewRepo.DailyStats(ctx, userID, userVocabularyID)
+	if err != nil {
+		return nil, err
+	}
+
+	status, familiarity, correctCount, wrongCount, consecutive, nextReviewAt, familiarityDelta := nextReviewState(detail.Item, isCorrect, dailyStats)
 	record := &model.VocabularyReviewRecord{
 		UserID:           userID,
 		UserVocabularyID: userVocabularyID,
 		ReviewQuestionID: reviewQuestionID,
 		SelectedOption:   selectedOption,
 		IsCorrect:        isCorrect,
+		FamiliarityDelta: familiarityDelta,
 	}
-	dailyStats, err := s.reviewRepo.DailyStats(ctx, userID, userVocabularyID)
-	if err != nil {
-		return nil, err
-	}
-
 	if _, err := s.reviewRepo.CreateRecord(ctx, record); err != nil {
 		return nil, err
 	}
 
-	status, familiarity, correctCount, wrongCount, consecutive, nextReviewAt := nextReviewState(detail.Item, isCorrect, dailyStats)
 	if err := s.vocabularyRepo.UpdateReviewProgress(
 		ctx,
 		userID,
@@ -213,6 +310,9 @@ func (s *ReviewService) SubmitAnswer(ctx context.Context, userID, userVocabulary
 		"wrong_count":               wrongCount,
 		"consecutive_correct_count": consecutive,
 		"proficiency":               familiarity,
+		"familiarity_delta":         familiarityDelta,
+		"today_progress_gain":       dailyStats.FamiliarityGain + familiarityDelta,
+		"daily_gain_cap_reached":    dailyStats.FamiliarityGain+familiarityDelta >= 40,
 	}, nil
 }
 
@@ -266,6 +366,7 @@ func meaningForReview(entry model.DictionaryEntry) string {
 
 type reviewQuestionCacheRequest struct {
 	DictionaryEntryID int64    `json:"dictionary_entry_id"`
+	QuestionOrder     int      `json:"question_order"`
 	Surface           string   `json:"surface"`
 	PrimaryMeaningZH  string   `json:"primary_meaning_zh"`
 	MeaningZH         string   `json:"meaning_zh"`
@@ -342,7 +443,7 @@ func (s *ReviewService) storeCachedReviewQuestion(ctx context.Context, taskType,
 	}
 }
 
-func nextReviewState(item model.UserVocabulary, isCorrect bool, dailyStats repository.DailyReviewStats) (model.VocabularyStatus, int, int, int, int, time.Time) {
+func nextReviewState(item model.UserVocabulary, isCorrect bool, dailyStats repository.DailyReviewStats) (model.VocabularyStatus, int, int, int, int, time.Time, int) {
 	now := time.Now()
 	familiarity := normalizeProficiency(item.Familiarity)
 	correctCount := item.CorrectCount
@@ -352,23 +453,22 @@ func nextReviewState(item model.UserVocabulary, isCorrect bool, dailyStats repos
 	if !isCorrect {
 		wrongCount++
 		consecutive = 0
-		return model.VocabularyLearning, familiarity, correctCount, wrongCount, consecutive, now.Add(nextReviewDuration(familiarity, dailyStats.CorrectCount, dailyStats.WrongCount+1))
+		return model.VocabularyLearning, familiarity, correctCount, wrongCount, consecutive, now.Add(nextReviewDuration(familiarity, dailyStats.CorrectCount, dailyStats.WrongCount+1)), 0
 	}
 
 	correctCount++
 	consecutive++
 	correctOrdinal := dailyStats.CorrectCount + 1
-	baseCap := dailyGainCap(familiarity)
-	adjustedCap := adjustedDailyGainCap(baseCap, dailyStats.WrongCount)
+	adjustedCap := max(0, 40-dailyStats.FamiliarityGain)
 	previousGain := min(theoreticalCorrectGain(dailyStats.CorrectCount), adjustedCap)
 	remainingGain := max(0, adjustedCap-previousGain)
 	gain := min(correctGain(correctOrdinal), remainingGain)
 	familiarity = min(100, familiarity+gain)
 
 	if familiarity >= 100 {
-		return model.VocabularyMastered, 100, correctCount, wrongCount, consecutive, now.Add(3650 * 24 * time.Hour)
+		return model.VocabularyMastered, 100, correctCount, wrongCount, consecutive, now.Add(3650 * 24 * time.Hour), gain
 	}
-	return model.VocabularyLearning, familiarity, correctCount, wrongCount, consecutive, now.Add(nextReviewDuration(familiarity, dailyStats.CorrectCount+1, dailyStats.WrongCount))
+	return model.VocabularyLearning, familiarity, correctCount, wrongCount, consecutive, now.Add(nextReviewDuration(familiarity, dailyStats.CorrectCount+1, dailyStats.WrongCount)), gain
 }
 
 func normalizeProficiency(value int) int {

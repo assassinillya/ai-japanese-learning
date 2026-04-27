@@ -1,6 +1,6 @@
-# ai-japanese-learning v1.7
+# ai-japanese-learning v1.8
 
-当前版本已经推进到 `v1.7`，重点按生词本复习计划重构词汇复习节奏和生词本页面，同时补充站点 favicon、GitHub / Issues 页脚等基础体验细节。
+当前版本已经推进到 `v1.8`，重点补齐生词本复习计划的加学、每日熟练度上限、多题轮换和启动预热逻辑。
 
 已完成：
 
@@ -81,6 +81,11 @@
 - 生词本详情栏支持随页面滚动停留在视口内，AI 例句面板布局更紧凑
 - 生词本复习逻辑按计划调整为“新词 / 学习中 / 熟悉”三态和 0-100% 熟练度
 - 每个词每天按答对轮次增长熟练度，答错会降低当天增长上限并缩短下次复习间隔
+- 每个生词在一天内会按计划多轮出现，答错后会动态追加更多复习轮次
+- 每日复习批次完成后提供“今天再多学习”输入框，用户可自定义继续学习数量
+- 额外加学会从未忽略的生词中取候选，答对仍可推进熟练度，但单词单日最多增长 40%
+- 每个生词支持 3 道复习题，优先下发用户未答过的问题，全部答过后随机轮换
+- 加入生词和项目启动时都会异步补齐缺失的生词复习题
 - 站点 favicon 使用书本、日字和 AI 星点组合图标
 - 页面底部提供 GitHub 链接和 Issues 反馈提示
 
@@ -221,7 +226,15 @@
   - 答对按当日轮次增加熟练度，答错不直接大幅扣分，但会降低当天增长上限并让词更快回到复习队列。
   - 生词本列表、详情页和统计概览展示熟练度进度条与三态摘要。
   - 手动标记熟悉会将熟练度设为 100，并从每日复习队列移出；学习中筛选兼容旧的 `reviewing` 数据。
+  - 复习页会把当天任务展开为多轮队列，同一个词不会只练一次；答错会在后续位置追加加练轮次。
+  - 当前批次完成后显示任务总结，并允许用户输入数量继续“今天再多学习”。
   - 新增站点 favicon，并在页面底部加入 GitHub 链接和 Issues 反馈提示。
+- `v1.8`
+  - 将 `生词本复习计划.md` 纳入项目文档。
+  - “今天再多学习”会请求额外复习队列，已学过的词答对仍可涨熟练度。
+  - 复习记录新增单次熟练度增量，单个生词每天最多增长 40%，达到上限后继续练习不再涨熟练度。
+  - 每个生词支持 3 道复习题，加入生词时后台异步生成，复习时优先使用当前用户未答过的问题。
+  - 新增启动预热任务，服务启动后扫描生词本中题目不足 3 道的词并异步补齐。
 
 后续每次功能或结构改动，都需要同步更新 `README.md` 的版本记录和当前说明。
 
@@ -329,6 +342,7 @@ psql -U postgres -d japanese_learning -f migrations/004_challenge_metadata_v05_f
 psql -U postgres -d japanese_learning -f migrations/005_post_reading_quiz_v06.sql
 psql -U postgres -d japanese_learning -f migrations/006_vocabulary_review_v07.sql
 psql -U postgres -d japanese_learning -f migrations/007_ai_cache_logs_v08.sql
+psql -U postgres -d japanese_learning -f migrations/008_vocabulary_review_three_questions.sql
 psql -U postgres -d japanese_learning -f seeds/001_seed.sql
 psql -U postgres -d japanese_learning -f seeds/002_mvp_seed_v09.sql
 ```
@@ -342,6 +356,7 @@ psql -U postgres -d japanese_learning -f migrations/004_challenge_metadata_v05_f
 psql -U postgres -d japanese_learning -f migrations/005_post_reading_quiz_v06.sql
 psql -U postgres -d japanese_learning -f migrations/006_vocabulary_review_v07.sql
 psql -U postgres -d japanese_learning -f migrations/007_ai_cache_logs_v08.sql
+psql -U postgres -d japanese_learning -f migrations/008_vocabulary_review_three_questions.sql
 psql -U postgres -d japanese_learning -f seeds/002_mvp_seed_v09.sql
 ```
 
@@ -638,4 +653,18 @@ docker compose up --build
 - 生词本列表和详情页展示熟练度进度条；统计概览合并展示新词、学习中、熟悉三态。
 - 复习答题返回当前熟练度和下次复习时间，熟悉词不再进入每日复习。
 - 答对按当日轮次增加熟练度，答错会降低当天增长上限并缩短复习间隔。
+- 复习页会将词语展开为 1-4 轮任务，答错词会追加更多轮次；完成后可输入数量继续加学。
 - 新增 `/assets/favicon.svg` 并在页面底部展示 GitHub 链接和 Issues 提示。
+
+## v1.8 生词复习题轮换与启动预热验证记录
+
+本轮补齐生词本复习计划中的额外加学、单日熟练度上限、每词 3 题和启动自动补题逻辑。
+
+已验证：
+
+- `node --check internal/web/assets/app.js` 通过。
+- `GOCACHE=D:\project\ai-japanese-learning\.gocache go test ./...` 通过。
+- 新增 `migrations/008_vocabulary_review_three_questions.sql`，用于移除每词单题唯一限制、增加题目序号和复习记录熟练度增量。
+- `GET /api/review/due?extra=1` 可用于完成每日任务后的额外加学。
+- `GET /api/review/question` 会优先返回当前用户未答过的复习题，3 题都答过后随机轮换。
+- 项目启动后会异步扫描生词本中题目不足 3 道的词，并调用 AI 生成补齐。
