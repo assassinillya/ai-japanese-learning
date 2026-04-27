@@ -668,3 +668,27 @@ docker compose up --build
 - `GET /api/review/due?extra=1` 可用于完成每日任务后的额外加学。
 - `GET /api/review/question` 会优先返回当前用户未答过的复习题，3 题都答过后随机轮换。
 - 项目启动后会异步扫描生词本中题目不足 3 道的词，并调用 AI 生成补齐。
+
+## v1.8 Review 记录
+
+本轮 review 聚焦生词本复习计划、词汇复习页面打开失败和复习题预热逻辑。
+
+已确认并修复：
+
+- 词汇复习页打开失败：前端复习进度文案误用不存在的 `item.dictionary.surface`，实际接口字段为 `dictionary_entry`，已改为 `item.dictionary_entry.surface`。
+- 进入词汇复习页时先切换视图再加载今日任务，避免接口等待期间页面仍停留在旧视图。
+- 熟练度增长按计划改为“当前熟练度档位每日上限 + 当日错题折减 + 实际已增长扣减”，不再使用固定 40% 和理论增长重复扣减。
+- 答到熟悉或手动标记熟悉后，会移除同一词在当前队列里的后续复习轮次。
+
+仍需跟进：
+
+- 高优先级：前端每轮会异步刷新题目，选项点击又会立即提交；如果刷新请求在用户点击和提交之间完成，可能出现“看到旧题、提交新题 ID”的竞态。建议每轮先固定题目快照再开放选项，或提交时使用渲染时绑定的 `question.id`。
+- 中优先级：从复习加载和 `NextQuestion` 触发的后台补题使用 `context.Background()`，会丢掉用户请求上下文中的 AI Provider 配置。建议传递带用户 AI 配置的后台 context。
+- 中优先级：补题任务目前只用 `prewarmStatus.Active` 控制进度展示，没有阻止实际并发执行；重复进入复习页或多个到期词可能并发触发同一词补题，造成重复 AI 调用和冲突更新。建议增加按词条的 singleflight 或补题队列。
+- 低优先级：提交前需要清理工作区，避免把无关文档删除和 `tmp/` 构建产物混入功能提交。
+
+验证：
+
+- `node --check internal/web/assets/app.js` 通过。
+- `GOCACHE=D:\project\ai-japanese-learning\.gocache go test ./...` 通过。
+- `GOCACHE=D:\project\ai-japanese-learning\.gocache go build ./...` 通过。
